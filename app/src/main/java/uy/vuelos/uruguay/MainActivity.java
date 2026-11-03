@@ -555,8 +555,8 @@ public final class MainActivity extends Activity {
                 boardHasResults=true;
                 viewingOtherDate=!today.equals(board.selectedDate);
                 driverBoard.render(flights,board.selectedDate,board.sourceEmpty);
-                if(!manualBrowsing && priorityVisible && driverBoard!=null &&
-                   SystemClock.elapsedRealtime()-lastDriverInteraction > 45000L){
+                if(RefreshModePolicy.shouldAutoFocus(!manualBrowsing,priorityVisible,
+                      SystemClock.elapsedRealtime(),lastDriverInteraction) && driverBoard!=null){
                     driverBoard.post(() -> { if(!manualBrowsing)driverBoard.smoothScrollTo(0,0); });
                 }
                 // The source's date may change when a user selects tomorrow. Keep it visible.
