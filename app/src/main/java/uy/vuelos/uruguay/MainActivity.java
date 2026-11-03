@@ -1,6 +1,9 @@
 package uy.vuelos.uruguay;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
 import android.app.AlertDialog;
 import android.text.InputType;
 import android.widget.EditText;
@@ -84,6 +87,17 @@ public final class MainActivity extends Activity {
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle;
+    private LinearLayout foregroundAlertCard;
+    private TextView foregroundAlertTitle, foregroundAlertBody;
+    private boolean alertReceiverRegistered=false;
+    private final BroadcastReceiver foregroundAlertReceiver=new BroadcastReceiver(){
+        @Override public void onReceive(Context context,Intent intent){
+            if(intent==null || !FlightAlertReceiver.ACTION_UI.equals(intent.getAction()))return;
+            String title=intent.getStringExtra("title");
+            String message=intent.getStringExtra("body");
+            if(title!=null && message!=null)showForegroundAlert(title,message);
+        }
+    };
     private TextView liveModeTab, manualModeTab, sourceWarning;
     private TextView futureDateButton, futureTimeButton, futureSearchButton;
     private LinearLayout futureControls;
@@ -527,7 +541,60 @@ public final class MainActivity extends Activity {
         secondFooter.addView(copyright);
         footer.addView(secondFooter, sp);
         root.addView(footer);
-        setContentView(root);
+
+        FrameLayout host=new FrameLayout(this);
+        host.addView(root,new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+        foregroundAlertCard=new LinearLayout(this);
+        foregroundAlertCard.setOrientation(LinearLayout.VERTICAL);
+        foregroundAlertCard.setBackground(rounded(WHITE,18,0xFFE0E8EE,1));
+        foregroundAlertCard.setElevation(dp(12));
+        foregroundAlertCard.setPadding(dp(17),dp(14),dp(15),dp(14));
+        foregroundAlertCard.setVisibility(View.GONE);
+        LinearLayout popupRow=new LinearLayout(this);
+        popupRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView emblem=label("✈",23,0xFF147C64,true);
+        popupRow.addView(emblem,new LinearLayout.LayoutParams(dp(32),ViewGroup.LayoutParams.WRAP_CONTENT));
+        foregroundAlertTitle=label("",17,TEXT,true);
+        popupRow.addView(foregroundAlertTitle,
+            new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        TextView close=label("×",24,SECONDARY,false);
+        close.setContentDescription("Cerrar aviso de vuelo");
+        close.setPadding(dp(8),0,0,0);
+        close.setOnClickListener(v->foregroundAlertCard.setVisibility(View.GONE));
+        popupRow.addView(close);
+        foregroundAlertCard.addView(popupRow);
+        foregroundAlertBody=label("",15,TEXT,false);
+        foregroundAlertBody.setPadding(dp(32),dp(8),0,dp(4));
+        foregroundAlertCard.addView(foregroundAlertBody);
+        TextView warning=label("Horario orientativo · Verificá antes de salir",11,SECONDARY,false);
+        warning.setPadding(dp(32),dp(5),0,0);
+        foregroundAlertCard.addView(warning);
+        FrameLayout.LayoutParams pop=new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+        pop.setMargins(dp(14),dp(12),dp(14),0);
+        host.addView(foregroundAlertCard,pop);
+        setContentView(host);
+    }
+
+    private void showForegroundAlert(String title,String message){
+        if(!foreground || foregroundAlertCard==null)return;
+        foregroundAlertTitle.setText(title);
+        foregroundAlertBody.setText(message);
+        foregroundAlertCard.animate().cancel();
+        foregroundAlertCard.setAlpha(0f);
+        foregroundAlertCard.setTranslationY(-dp(15));
+        foregroundAlertCard.setVisibility(View.VISIBLE);
+        foregroundAlertCard.animate().alpha(1f).translationY(0).setDuration(230).start();
+        final String snapshot=title+"|"+message;
+        handler.postDelayed(()->{
+            if(foregroundAlertCard!=null &&
+               (foregroundAlertTitle.getText()+"|"+foregroundAlertBody.getText()).equals(snapshot)){
+                foregroundAlertCard.animate().alpha(0f).setDuration(200)
+                    .withEndAction(()->foregroundAlertCard.setVisibility(View.GONE)).start();
+            }
+        },9000L);
     }
 
     private void updateClock() {
@@ -677,6 +744,7 @@ public final class MainActivity extends Activity {
                 }else if(viewingOtherDate){
                     status.setText(flights.size()+" arribos de la fecha consultada · alertas solo para hoy");
                 }else if(FlightAlerts.enabled(this)){
+                    FlightAlerts.observeConfirmedLandings(this,flights,now);
                     int scheduled=FlightAlerts.schedule(this,flights,now);
                     status.setText(flights.size()+" llegadas · "+scheduled+" avisos programados");
                 }else status.setText(flights.size()+" llegadas identificadas · datos externos");
@@ -802,34 +870,59 @@ public final class MainActivity extends Activity {
     }
 
     private void renderAlertsToggle(){
-        if(alertsToggle==null) return;
+        if(alertsToggle==null)return;
         boolean active=FlightAlerts.enabled(this);
-        alertsToggle.setText(active?"● ALERTAS ON":"○ ACTIVAR ALERTAS");
+        String modeText=FlightAlerts.mode(this)==FlightAlerts.SOUND_VIBRATE?"SONIDO + VIB.":
+            FlightAlerts.mode(this)==FlightAlerts.VIBRATE?"SOLO VIBRACIÓN":"SOLO VISUAL";
+        alertsToggle.setText(active?"● "+modeText:"○ ACTIVAR ALERTAS");
         alertsToggle.setTextColor(active?0xFF0B785D:TEXT);
         alertsToggle.setBackground(rounded(active?0xFFE1F8EA:0xFFE8EDF2,14,0,0));
+        alertsToggle.setContentDescription(active?
+            "Alertas activas. Tocá para configurar sonido vibración o desactivar.":
+            "Activar alertas de vuelos 40 y 20 minutos antes");
     }
 
-    private void toggleFlightAlerts() {
-        if(FlightAlerts.enabled(this)){
-            FlightAlerts.setEnabled(this,false);
-            renderAlertsToggle();
-            status.setText("Alertas desactivadas");
+    private void toggleFlightAlerts(){
+        if(!FlightAlerts.enabled(this)){
+            if(Build.VERSION.SDK_INT>=33 &&
+               checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},303);
+                return;
+            }
+            enableFlightAlerts();
             return;
         }
-        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},303);
-            return;
-        }
-        enableFlightAlerts();
+        String[] entries={"Sonido y vibración","Solo vibración","Solo visual","Desactivar alertas"};
+        int current=FlightAlerts.mode(this);
+        new AlertDialog.Builder(this)
+            .setTitle("Avisos de vuelos")
+            .setSingleChoiceItems(entries,current,(dialog,selected)->{
+                dialog.dismiss();
+                if(selected==3){
+                    FlightAlerts.setEnabled(this,false);
+                    status.setText("Alertas desactivadas");
+                }else{
+                    FlightAlerts.setMode(this,selected);
+                    if(!flights.isEmpty() && !manualBrowsing && mode==0)
+                        FlightAlerts.schedule(this,flights,System.currentTimeMillis());
+                    status.setText("Alertas configuradas · avisos 40 y 20 min antes");
+                }
+                renderAlertsToggle();
+            })
+            .setNegativeButton("Cerrar",(d,w)->{})
+            .show();
     }
 
     private void enableFlightAlerts(){
         FlightAlerts.setEnabled(this,true);
+        FlightAlertReceiver.createChannels(this);
         renderAlertsToggle();
-        if(flights.isEmpty())status.setText("Alertas activadas · sin arribos identificados todavía");
-        else {
+        if(flights.isEmpty() || manualBrowsing || mode!=0){
+            status.setText("Avisos activados · se programarán al consultar las llegadas de hoy");
+        }else{
+            FlightAlerts.observeConfirmedLandings(this,flights,System.currentTimeMillis());
             int scheduled=FlightAlerts.schedule(this,flights,System.currentTimeMillis());
-            status.setText("Alertas activadas · "+scheduled+" avisos programados");
+            status.setText("Avisos activados · "+scheduled+" programados (40/20 min)");
         }
     }
 
@@ -864,6 +957,13 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
+        if(!alertReceiverRegistered){
+            IntentFilter filter=new IntentFilter(FlightAlertReceiver.ACTION_UI);
+            if(Build.VERSION.SDK_INT>=33)
+                registerReceiver(foregroundAlertReceiver,filter,Context.RECEIVER_NOT_EXPORTED);
+            else registerReceiver(foregroundAlertReceiver,filter);
+            alertReceiverRegistered=true;
+        }
         updateClock();
         if (panel != null && autoRefresh && !manualBrowsing && !viewingOtherDate && lastLoadedElapsed > 0L
             && SystemClock.elapsedRealtime() - lastLoadedElapsed >= REFRESH_MS) {
@@ -874,7 +974,12 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         foreground = false;
+        if(alertReceiverRegistered){
+            try{unregisterReceiver(foregroundAlertReceiver);}catch(Exception ignored){}
+            alertReceiverRegistered=false;
+        }
         handler.removeCallbacks(refreshTask);
+        if(foregroundAlertCard!=null)foregroundAlertCard.setVisibility(View.GONE);
         super.onPause();
     }
 
