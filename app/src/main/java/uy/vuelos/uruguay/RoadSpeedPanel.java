@@ -36,6 +36,9 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     private final SpeedLimitLookup lookup=new SpeedLimitLookup();
     private LocationManager locationManager;
     private final TextView speedValue, limitValue, stateValue, gpsToggle, warningToggle;
+    private LinearLayout speedTile, limitTile;
+    private TextView speedCaption, limitCaption;
+    private String roadStatus = "Límite no disponible";
     private boolean resumed=false, tracking=false, enabled, warnings;
     private boolean hasUsableSpeed=false;
     private int currentKmh=-1, currentLimit=0;
@@ -47,65 +50,102 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         enabled=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedEnabled",false);
         warnings=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedWarning",false);
         setOrientation(VERTICAL);
-        setBackgroundColor(0xFFF8FAFC);
-        setPadding(dp(13),dp(7),dp(13),dp(7));
-        LinearLayout row=new LinearLayout(a);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+        setBackgroundColor(0xFFF7FAFC);
+        setPadding(dp(11),dp(8),dp(11),dp(6));
 
-        LinearLayout speedGroup=new LinearLayout(a);
-        speedGroup.setOrientation(VERTICAL);
-        speedGroup.addView(text("VELOCIDAD GPS",9,MUTED,true));
-        speedValue=text("—",24,NAVY,true);
-        speedGroup.addView(speedValue);
-        row.addView(speedGroup,new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        // Phone-width layout: two large readings and one narrow control column.
+        LinearLayout meters=new LinearLayout(a);
+        meters.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout limitGroup=new LinearLayout(a);
-        limitGroup.setOrientation(VERTICAL);
-        limitGroup.setGravity(Gravity.CENTER_HORIZONTAL);
-        limitGroup.addView(text("LÍMITE CALLE",9,MUTED,true));
-        limitValue=text("—",23,NAVY,true);
-        limitValue.setGravity(Gravity.CENTER);
-        limitValue.setMinWidth(dp(48));
-        limitValue.setPadding(dp(7),dp(2),dp(7),dp(2));
-        limitGroup.addView(limitValue);
-        LayoutParams limitParams=new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
-        row.addView(limitGroup,limitParams);
+        speedTile=new LinearLayout(a);
+        speedTile.setOrientation(VERTICAL);
+        speedTile.setPadding(dp(12),dp(7),dp(9),dp(7));
+        speedCaption=text("VELOCIDAD ACTUAL",9,MUTED,true);
+        speedTile.addView(speedCaption);
+        LinearLayout currentLine=new LinearLayout(a);
+        currentLine.setGravity(Gravity.BOTTOM);
+        speedValue=text("—",34,NAVY,true);
+        speedValue.setIncludeFontPadding(false);
+        currentLine.addView(speedValue);
+        TextView speedUnit=text("km/h",11,MUTED,false);
+        speedUnit.setPadding(dp(5),0,0,dp(4));
+        currentLine.addView(speedUnit);
+        speedTile.addView(currentLine);
+        speedTile.setBackground(pill(Color.WHITE,0xFFE1EAF0));
+
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(
+            0,ViewGroup.LayoutParams.WRAP_CONTENT,1.05f);
+        sp.rightMargin=dp(7);
+        meters.addView(speedTile,sp);
+
+        limitTile=new LinearLayout(a);
+        limitTile.setOrientation(VERTICAL);
+        limitTile.setPadding(dp(10),dp(7),dp(7),dp(7));
+        limitCaption=text("LÍMITE DEL TRAMO",9,MUTED,true);
+        limitTile.addView(limitCaption);
+        LinearLayout limitLine=new LinearLayout(a);
+        limitLine.setGravity(Gravity.BOTTOM);
+        limitValue=text("—",32,NAVY,true);
+        limitValue.setIncludeFontPadding(false);
+        limitLine.addView(limitValue);
+        TextView limitUnit=text("km/h",11,MUTED,false);
+        limitUnit.setPadding(dp(4),0,0,dp(4));
+        limitLine.addView(limitUnit);
+        limitTile.addView(limitLine);
+        limitTile.setBackground(pill(Color.WHITE,0xFFE1EAF0));
+
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
+            0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
+        lp.rightMargin=dp(7);
+        meters.addView(limitTile,lp);
 
         LinearLayout options=new LinearLayout(a);
         options.setOrientation(VERTICAL);
-        options.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
-        gpsToggle=text("",11,NAVY,true);
+        options.setGravity(Gravity.CENTER);
+        gpsToggle=text("",10,NAVY,true);
         gpsToggle.setGravity(Gravity.CENTER);
-        gpsToggle.setPadding(dp(10),dp(7),dp(10),dp(7));
+        gpsToggle.setMinHeight(dp(36));
+        gpsToggle.setPadding(dp(5),dp(5),dp(5),dp(5));
         gpsToggle.setOnClickListener(v->toggleGPS());
-        options.addView(gpsToggle);
-        warningToggle=text("",10,MUTED,true);
+        options.addView(gpsToggle,new LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        warningToggle=text("",9,MUTED,true);
         warningToggle.setGravity(Gravity.CENTER);
-        warningToggle.setPadding(dp(7),dp(4),dp(7),dp(4));
+        warningToggle.setMinHeight(dp(29));
+        warningToggle.setPadding(dp(3),dp(4),dp(3),dp(4));
         warningToggle.setOnClickListener(v->{
             warnings=!warnings;
             activity.getPreferences(Context.MODE_PRIVATE).edit()
                 .putBoolean("roadSpeedWarning",warnings).apply();
-            overSince=0;renderToggle();
+            overSince=0;
+            renderToggle();
         });
-        options.addView(warningToggle);
-        row.addView(options,new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1.06f));
-        addView(row);
+        options.addView(warningToggle,new LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        meters.addView(options,new LinearLayout.LayoutParams(dp(70),
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        addView(meters);
 
-        LinearLayout sourceRow=new LinearLayout(a);
-        sourceRow.setGravity(Gravity.CENTER_VERTICAL);
-        stateValue=text("Activá GPS para ver tu velocidad",10,MUTED,false);
-        sourceRow.addView(stateValue,new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        LinearLayout footer=new LinearLayout(a);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        footer.setPadding(dp(2),dp(5),dp(2),0);
+        stateValue=text("GPS apagado · tocá GPS para activar",10,MUTED,false);
+        stateValue.setSingleLine(true);
+        stateValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        footer.addView(stateValue,new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         TextView credit=text("© OpenStreetMap",9,0xFF337A91,false);
-        credit.setContentDescription("Información vial de OpenStreetMap");
+        credit.setContentDescription("Datos viales OpenStreetMap. Abrir condiciones de atribución");
+        credit.setPadding(dp(5),0,0,0);
         credit.setOnClickListener(v->{
             try{activity.startActivity(new Intent(Intent.ACTION_VIEW,
                 Uri.parse("https://www.openstreetmap.org/copyright")));}
             catch(Exception ignored){}
         });
-        sourceRow.addView(credit);
-        addView(sourceRow);
+        footer.addView(credit);
+        addView(footer);
         renderToggle();
+        renderSpeedColors();
     }
 
     private int dp(int x){return Math.round(x*getResources().getDisplayMetrics().density);}
