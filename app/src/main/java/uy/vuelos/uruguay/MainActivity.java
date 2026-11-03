@@ -763,7 +763,7 @@ public final class MainActivity extends Activity {
             .setNeutralButton("Ver plan gratuito",(d,w)->{
                 try{
                     startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://rapidapi.com/search/skylink-api")));
+                        Uri.parse("https://rapidapi.com/skylink-api-skylink-api-default/api/skylink-api")));
                 }catch(Exception ignored){}
             })
             .setPositiveButton("Guardar",null)
