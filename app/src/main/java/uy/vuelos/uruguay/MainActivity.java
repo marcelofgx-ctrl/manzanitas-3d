@@ -58,11 +58,13 @@ public final class MainActivity extends Activity {
     private int mode = 0;
     private long lastLoadedElapsed = 0L;
     private boolean viewingOtherDate = false;
+    private boolean manualBrowsing = false;
+    private long lastDriverInteraction = 0L;
 
     private WebView panel;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshTask = () -> {
-        if (foreground && autoRefresh && !viewingOtherDate && panel != null) {
+        if (RefreshModePolicy.shouldReload(foreground,autoRefresh,manualBrowsing,viewingOtherDate) && panel != null) {
             panel.reload();
             scheduleAutoRefresh();
         }
@@ -73,6 +75,7 @@ public final class MainActivity extends Activity {
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle;
+    private TextView liveModeTab, manualModeTab;
     private DriverBoard driverBoard;
     private List<FlightData.Flight> flights = new ArrayList<>();
     private int readToken = 0;
@@ -235,12 +238,36 @@ public final class MainActivity extends Activity {
         TextView caption = label("   MOVIMIENTOS DE VUELOS", 11, 0xFF5C788D, true);
         caption.setLetterSpacing(0.08f);
         caption.setPadding(dp(10), dp(12), dp(10), dp(9));
+        LinearLayout modeBar = new LinearLayout(this);
+        modeBar.setPadding(dp(8),dp(7),dp(8),dp(2));
+        modeBar.setGravity(Gravity.CENTER_VERTICAL);
+        liveModeTab = label("●  HOY · EN VIVO",12,TEXT,true);
+        liveModeTab.setGravity(Gravity.CENTER);
+        liveModeTab.setPadding(dp(5),dp(11),dp(5),dp(11));
+        liveModeTab.setOnClickListener(v -> returnToLive());
+        manualModeTab = label("◷  CONSULTAR FECHA",12,TEXT,true);
+        manualModeTab.setGravity(Gravity.CENTER);
+        manualModeTab.setPadding(dp(5),dp(11),dp(5),dp(11));
+        manualModeTab.setOnClickListener(v -> enterManualBrowsing(true));
+        LinearLayout.LayoutParams liveLp = new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
+        liveLp.rightMargin=dp(4);
+        modeBar.addView(liveModeTab,liveLp);
+        LinearLayout.LayoutParams manualLp = new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
+        manualLp.leftMargin=dp(4);
+        modeBar.addView(manualModeTab,manualLp);
+        content.addView(modeBar);
+        renderModeTabs();
+
         LinearLayout captionLine = new LinearLayout(this);
         captionLine.setGravity(Gravity.CENTER_VERTICAL);
         captionLine.addView(caption,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         driverToggle = label("PANEL ↗",11,0xFF167866,true);
         driverToggle.setPadding(dp(10),dp(8),dp(10),dp(8));
-        driverToggle.setOnClickListener(v -> displayPriority(!priorityVisible));
+        driverToggle.setOnClickListener(v -> {
+            if (priorityVisible) enterManualBrowsing(true);
+            else if (boardHasResults) displayPriority(true);
+            else enterManualBrowsing(true);
+        });
         captionLine.addView(driverToggle);
         content.addView(captionLine);
 
@@ -269,12 +296,18 @@ public final class MainActivity extends Activity {
             }
         });
         panel.setOnTouchListener((view, event) -> {
-            if (mode == 0 && !priorityVisible && event.getAction() == android.view.MotionEvent.ACTION_UP) {
-                sourceTapAt = SystemClock.elapsedRealtime();
-                final int token = ++readToken;
-                handler.postDelayed(() -> extractFlights(token,0),1250L);
-                handler.postDelayed(() -> extractFlights(token,1),3200L);
-                handler.postDelayed(() -> extractFlights(token,2),5900L);
+            if (mode == 0 && !priorityVisible) {
+                if(event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                    // Any manual interaction with Avionio freezes its current filter before auto reload.
+                    enterManualBrowsing(false);
+                }
+                if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                    sourceTapAt = SystemClock.elapsedRealtime();
+                    final int token = ++readToken;
+                    handler.postDelayed(() -> extractFlights(token,0),1250L);
+                    handler.postDelayed(() -> extractFlights(token,1),3200L);
+                    handler.postDelayed(() -> extractFlights(token,2),5900L);
+                }
             }
             return false;
         });
@@ -322,6 +355,13 @@ public final class MainActivity extends Activity {
         FrameLayout flightFrame = new FrameLayout(this);
         flightFrame.addView(panel, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         driverBoard = new DriverBoard(this);
+        driverBoard.setOnTouchListener((v,event)->{
+            if(event.getAction() == android.view.MotionEvent.ACTION_DOWN ||
+                event.getAction() == android.view.MotionEvent.ACTION_MOVE){
+                lastDriverInteraction=SystemClock.elapsedRealtime();
+            }
+            return false;
+        });
         driverBoard.setVisibility(View.GONE);
         flightFrame.addView(driverBoard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         content.addView(flightFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -360,7 +400,10 @@ public final class MainActivity extends Activity {
         autoSwitch = label("", 11, 0xFF0D8468, true);
         autoSwitch.setGravity(Gravity.CENTER);
         autoSwitch.setPadding(dp(10), dp(7), dp(10), dp(7));
-        autoSwitch.setOnClickListener(v -> toggleAuto());
+        autoSwitch.setOnClickListener(v -> {
+            if(manualBrowsing)returnToLive();
+            else toggleAuto();
+        });
         firstFooter.addView(autoSwitch);
         footer.addView(firstFooter);
         LinearLayout noticeBar = new LinearLayout(this);
@@ -410,6 +453,8 @@ public final class MainActivity extends Activity {
         flights.clear();
         boardHasResults = false;
         viewingOtherDate = false;
+        manualBrowsing = false;
+        renderModeTabs();
         renderAuto();
         displayPriority(false);
         panel.loadUrl(mode == 0 ? ARRIVALS : DEPARTURES);
@@ -417,10 +462,57 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshNow() {
-        if (panel == null) return;
+        if(panel==null)return;
         updateClock();
         errorLayer.setVisibility(View.GONE);
+        if (manualBrowsing){
+            // Reload would discard the date/time selected inside the provider's WebView.
+            final int token=++readToken;
+            status.setText("Consulta fija · Para cambiar el resultado, usá la flecha azul del panel");
+            handler.postDelayed(() -> extractFlights(token,0),350);
+            return;
+        }
         panel.reload();
+        scheduleAutoRefresh();
+    }
+
+    private void renderModeTabs(){
+        if(liveModeTab==null||manualModeTab==null)return;
+        liveModeTab.setTextColor(manualBrowsing?SECONDARY:NAVY);
+        manualModeTab.setTextColor(manualBrowsing?NAVY:SECONDARY);
+        liveModeTab.setBackground(rounded(manualBrowsing?0xFFF0F3F5:0xFFB6F1DE,13,0,0));
+        manualModeTab.setBackground(rounded(manualBrowsing?0xFFB6F1DE:0xFFF0F3F5,13,0,0));
+        liveModeTab.setContentDescription("Volver al día de hoy y reanudar la actualización automática");
+        manualModeTab.setContentDescription("Consulta manual: conservar fecha y posición al refrescar");
+    }
+
+    private void enterManualBrowsing(boolean showSource) {
+        if(mode!=0)return;
+        manualBrowsing=true;
+        handler.removeCallbacks(refreshTask);
+        if(showSource)displayPriority(false);
+        renderModeTabs();
+        renderAuto();
+        if(status != null)status.setText("CONSULTA MANUAL · filtro protegido · actualización pausada");
+    }
+
+    private void returnToLive(){
+        if(mode!=0){selectMode(0);return;}
+        if(!manualBrowsing){
+            if(priorityVisible&&driverBoard!=null) driverBoard.smoothScrollTo(0,0);
+            return;
+        }
+        manualBrowsing=false;
+        viewingOtherDate=false;
+        readToken++;
+        flights.clear();
+        boardHasResults=false;
+        displayPriority(false);
+        renderModeTabs();
+        renderAuto();
+        subheading.setText("Horarios y estado de los vuelos");
+        // Only an explicit 'Hoy' action may reset the provider's date selector.
+        panel.loadUrl(ARRIVALS);
         scheduleAutoRefresh();
     }
 
@@ -429,7 +521,7 @@ public final class MainActivity extends Activity {
         priorityVisible = wantPriority && mode==0 && boardHasResults;
         if (driverBoard != null) driverBoard.setVisibility(priorityVisible?View.VISIBLE:View.GONE);
         if (panel != null) panel.setVisibility(priorityVisible?View.INVISIBLE:View.VISIBLE);
-        if (driverToggle != null) driverToggle.setText(priorityVisible?"VER PANEL ↗":"PRÓXIMOS ↗");
+        if (driverToggle != null) driverToggle.setText(priorityVisible?"VER FILTRO ↗":boardHasResults?"VER RESUMEN ↗":"PANEL ORIGINAL ↗");
     }
 
     private void extractFlights(int token, int attempt) {
@@ -444,11 +536,17 @@ public final class MainActivity extends Activity {
                 boardHasResults=true;
                 viewingOtherDate=!today.equals(board.selectedDate);
                 driverBoard.render(flights,board.selectedDate,board.sourceEmpty);
+                if(!manualBrowsing && priorityVisible && driverBoard!=null &&
+                   SystemClock.elapsedRealtime()-lastDriverInteraction > 45000L){
+                    driverBoard.post(() -> { if(!manualBrowsing)driverBoard.smoothScrollTo(0,0); });
+                }
                 // The source's date may change when a user selects tomorrow. Keep it visible.
                 if(viewingOtherDate){
                     subheading.setText("Consulta: "+DateTimeFormatter.ofPattern("d MMM yyyy",new Locale("es","UY")).format(board.selectedDate));
                 }else subheading.setText("Horarios y estado de los vuelos");
-                displayPriority(true);
+                if(viewingOtherDate && !manualBrowsing)enterManualBrowsing(false);
+                if(!manualBrowsing) displayPriority(true);
+                else displayPriority(false);
                 renderAuto();
                 scheduleAutoRefresh();
                 if(board.sourceEmpty){
@@ -515,10 +613,10 @@ public final class MainActivity extends Activity {
 
     private void renderAuto() {
         if (autoSwitch == null) return;
-        autoSwitch.setText(viewingOtherDate && autoRefresh ? "● AUTO PAUSA" : autoRefresh ? "● AUTO 3 MIN" : "○ AUTO OFF");
+        autoSwitch.setText(manualBrowsing?"◷ MANUAL FIJO":viewingOtherDate&&autoRefresh?"● AUTO PAUSA":autoRefresh?"● AUTO 3 MIN":"○ AUTO OFF");
         autoSwitch.setTextColor(autoRefresh ? 0xFF137961 : SECONDARY);
         autoSwitch.setBackground(rounded(autoRefresh ? 0xFFE0F9EF : 0xFFE8EDF1, 16, 0, 0));
-        autoSwitch.setContentDescription(autoRefresh ? "Desactivar actualización cada 3 minutos" : "Activar actualización cada 3 minutos");
+        autoSwitch.setContentDescription(manualBrowsing?"Consulta manual fija; volver a Hoy para actualizar automáticamente":autoRefresh?"Desactivar actualización cada 3 minutos":"Activar actualización cada 3 minutos");
     }
 
     private void toggleAuto() {
@@ -530,14 +628,14 @@ public final class MainActivity extends Activity {
 
     private void scheduleAutoRefresh() {
         handler.removeCallbacks(refreshTask);
-        if (foreground && autoRefresh && !viewingOtherDate) handler.postDelayed(refreshTask, REFRESH_MS);
+        if (RefreshModePolicy.shouldReload(foreground,autoRefresh,manualBrowsing,viewingOtherDate)) handler.postDelayed(refreshTask, REFRESH_MS);
     }
 
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
         updateClock();
-        if (panel != null && autoRefresh && !viewingOtherDate && lastLoadedElapsed > 0L
+        if (panel != null && autoRefresh && !manualBrowsing && !viewingOtherDate && lastLoadedElapsed > 0L
             && SystemClock.elapsedRealtime() - lastLoadedElapsed >= REFRESH_MS) {
             panel.reload();
         }
@@ -552,6 +650,8 @@ public final class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle out) {
         out.putInt("mode", mode);
+        out.putBoolean("manualBrowsing",manualBrowsing);
+        out.putBoolean("viewingOtherDate",viewingOtherDate);
         super.onSaveInstanceState(out);
     }
 
