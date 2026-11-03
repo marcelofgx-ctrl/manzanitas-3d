@@ -75,7 +75,7 @@ public final class MainActivity extends Activity {
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle;
-    private TextView liveModeTab, manualModeTab;
+    private TextView liveModeTab, manualModeTab, sourceWarning;
     private DriverBoard driverBoard;
     private List<FlightData.Flight> flights = new ArrayList<>();
     private int readToken = 0;
@@ -270,6 +270,19 @@ public final class MainActivity extends Activity {
         });
         captionLine.addView(driverToggle);
         content.addView(captionLine);
+        sourceWarning=label("Fuente sin datos · Consultar Carrasco oficial ↗",11,0xFF805216,true);
+        sourceWarning.setBackground(rounded(0xFFFFF1D8,10,0,0));
+        sourceWarning.setPadding(dp(12),dp(10),dp(12),dp(10));
+        sourceWarning.setVisibility(View.GONE);
+        sourceWarning.setOnClickListener(v->{
+            try{startActivity(new Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://aeropuertodecarrasco.com.uy/panel-de-vuelos/")));}
+            catch(Exception ignored){}
+        });
+        LinearLayout.LayoutParams warningLp=new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        warningLp.setMargins(dp(11),dp(3),dp(11),dp(7));
+        content.addView(sourceWarning,warningLp);
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
@@ -454,6 +467,7 @@ public final class MainActivity extends Activity {
         boardHasResults = false;
         viewingOtherDate = false;
         manualBrowsing = false;
+        if(sourceWarning!=null)sourceWarning.setVisibility(View.GONE);
         renderModeTabs();
         renderAuto();
         displayPriority(false);
@@ -507,6 +521,7 @@ public final class MainActivity extends Activity {
         readToken++;
         flights.clear();
         boardHasResults=false;
+        if(sourceWarning!=null)sourceWarning.setVisibility(View.GONE);
         displayPriority(false);
         renderModeTabs();
         renderAuto();
@@ -532,6 +547,10 @@ public final class MainActivity extends Activity {
             FlightData.BoardSnapshot board=FlightData.parseBoardJs(payload,now);
             LocalDate today=Instant.ofEpochMilli(now).atZone(FlightData.UY).toLocalDate();
             if(board.parsed) {
+                if(sourceWarning!=null){
+                    sourceWarning.setText("Avionio no devuelve vuelos para esta consulta. No confirma ausencia de arribos. Ver Carrasco oficial ↗");
+                    sourceWarning.setVisibility(board.sourceEmpty?View.VISIBLE:View.GONE);
+                }
                 flights=board.flights;
                 boardHasResults=true;
                 viewingOtherDate=!today.equals(board.selectedDate);
@@ -561,6 +580,10 @@ public final class MainActivity extends Activity {
             } else if(attempt<2){
                 handler.postDelayed(() -> extractFlights(token,attempt+1),1600);
             } else {
+                if(sourceWarning!=null){
+                    sourceWarning.setText("No se pudieron verificar vuelos con este filtro. Comprobar Carrasco oficial ↗");
+                    sourceWarning.setVisibility(View.VISIBLE);
+                }
                 flights.clear();
                 boardHasResults=false;
                 viewingOtherDate=false;
