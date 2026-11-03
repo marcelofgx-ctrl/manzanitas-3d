@@ -10,54 +10,126 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.RingtoneManager;
+import android.media.AudioAttributes;
 import android.os.Build;
-import android.os.Bundle;
+import android.content.SharedPreferences;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 
+/** Standard Android notification outside the app; a rounded white in-app card is separate. */
 public final class FlightAlertReceiver extends BroadcastReceiver {
-    public static final String CHANNEL = "vuelos_uy_aviso_aproximacion_v1";
-    public static void createChannel(Context context) {
-        NotificationManager nm=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if(nm.getNotificationChannel(CHANNEL)==null){
-            NotificationChannel channel=new NotificationChannel(CHANNEL,"Avisos de vuelos próximos",NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("Avisos según la última cartelera consultada, no notificaciones en vivo del aeropuerto");
-            channel.enableVibration(true);
-            channel.setVibrationPattern(new long[]{0,250,160,250});
-            channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION).build());
-            nm.createNotificationChannel(channel);
+    public static final String ACTION_UI="uy.vuelos.uruguay.ACTION_ALERT_CARD";
+    private static final String ACTION="uy.vuelos.uruguay.ACTION_FLIGHT_ALERT";
+    public static final String CHANNEL_SOUND="vuelos_uy_sonido_vibracion_v19";
+    public static final String CHANNEL_VIBRATE="vuelos_uy_solo_vibracion_v19";
+    public static final String CHANNEL_VISUAL="vuelos_uy_solo_visual_v19";
+
+    public static void createChannel(Context ctx){
+        createChannels(ctx);
+    }
+    public static void createChannels(Context ctx){
+        NotificationManager nm=(NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if(nm==null)return;
+        if(nm.getNotificationChannel(CHANNEL_SOUND)==null){
+            NotificationChannel c=new NotificationChannel(CHANNEL_SOUND,
+                "Vuelos · Sonido y vibración",NotificationManager.IMPORTANCE_HIGH);
+            c.setDescription("Avisos locales calculados con la última información consultada");
+            c.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
+            c.enableVibration(true);
+            c.setVibrationPattern(new long[]{0,260,160,230});
+            nm.createNotificationChannel(c);
+        }
+        if(nm.getNotificationChannel(CHANNEL_VIBRATE)==null){
+            NotificationChannel c=new NotificationChannel(CHANNEL_VIBRATE,
+                "Vuelos · Solo vibración",NotificationManager.IMPORTANCE_HIGH);
+            c.setSound(null,null);
+            c.enableVibration(true);
+            c.setVibrationPattern(new long[]{0,220,170,220});
+            nm.createNotificationChannel(c);
+        }
+        if(nm.getNotificationChannel(CHANNEL_VISUAL)==null){
+            NotificationChannel c=new NotificationChannel(CHANNEL_VISUAL,
+                "Vuelos · Solo visual",NotificationManager.IMPORTANCE_HIGH);
+            c.setSound(null,null);
+            c.enableVibration(false);
+            nm.createNotificationChannel(c);
         }
     }
 
-    @Override public void onReceive(Context context,Intent intent){
-        if(!"uy.vuelos.uruguay.ACTION_FLIGHT_ALERT".equals(intent.getAction())) return;
-        if(!context.getSharedPreferences("flight_alert_settings",Context.MODE_PRIVATE).getBoolean("enabled",false)) return;
-        if(Build.VERSION.SDK_INT>=33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) return;
-        long fetched=intent.getLongExtra("fetched",0), eta=intent.getLongExtra("eta",0), now=System.currentTimeMillis();
-        // Fail closed on stale data and outdated flights, since the app does not monitor live while minimized.
-        if(fetched<=0 || now-fetched>75*60000L || eta < now-25*60000L) return;
+    private static String channelFor(Context ctx,boolean landed){
+        int mode=FlightAlerts.mode(ctx);
+        if(mode==FlightAlerts.VISUAL)return CHANNEL_VISUAL;
+        if(landed || mode==FlightAlerts.VIBRATE)return CHANNEL_VIBRATE;
+        return CHANNEL_SOUND;
+    }
+
+    /** Called only for source-confirmed landings observed as previously in flight. */
+    public static boolean notifyConfirmed(Context ctx,String key,String body){
+        if(!FlightAlerts.enabled(ctx) || !FlightAlerts.permitted(ctx))return false;
+        return post(ctx, "✈ Aterrizaje confirmado",body,key,true);
+    }
+
+    @Override public void onReceive(Context ctx,Intent intent){
+        if(intent==null || !ACTION.equals(intent.getAction()))return;
+        if(!FlightAlerts.enabled(ctx) || !FlightAlerts.permitted(ctx))return;
+        long fetched=intent.getLongExtra("fetched",0L);
+        long eta=intent.getLongExtra("eta",0L);
+        int stage=intent.getIntExtra("stage",-1);
+        long now=System.currentTimeMillis();
+        if(!ArrivalAlertPolicy.validDelivery(stage,eta,fetched,now))return;
         String key=intent.getStringExtra("group_key");
-        if(key==null || !key.matches("\\d{1,15}"))return;
-        android.content.SharedPreferences history=context.getSharedPreferences(FlightAlerts.SETTINGS,Context.MODE_PRIVATE);
-        if(history.getLong("notified_"+key,0L)>0L)return;
-        String body=intent.getStringExtra("body");
-        if(body==null || body.isEmpty()) return;
-        createChannel(context);
-        Intent open=new Intent(context,MainActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent content=PendingIntent.getActivity(context,999,open,
-            PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        Notification notification=new Notification.Builder(context,CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification_plane)
-            .setContentTitle("✈ Vuelos próximos a Carrasco")
-            .setContentText(body)
-            .setStyle(new Notification.BigTextStyle().bigText(body+" · Horarios orientativos de la última consulta"))
-            .setContentIntent(content)
-            .setAutoCancel(true)
-            .setCategory(Notification.CATEGORY_EVENT)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .build();
-        NotificationManager mgr=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
-        mgr.notify(intent.getIntExtra("id",1000),notification);
-        history.edit().putLong("notified_"+key,now).apply();
+        if(key==null || !key.matches("\\d{5,14}_(40|20)"))return;
+        SharedPreferences prefs=ctx.getSharedPreferences(FlightAlerts.SETTINGS,Context.MODE_PRIVATE);
+        if(prefs.getLong("notified_"+key,0L)>0L)return;
+        int count=intent.getIntExtra("count",1);
+        String origin=intent.getStringExtra("origin");
+        String flight=intent.getStringExtra("flight");
+        if(origin==null)origin="Procedencia por confirmar";
+        if(flight==null)flight="";
+        String remaining=ArrivalAlertPolicy.remaining(eta,now);
+        String localTime=DateTimeFormatter.ofPattern("HH:mm").withZone(FlightData.UY)
+            .format(Instant.ofEpochMilli(eta));
+        String body=count>1?
+            count+" vuelos previstos · el próximo en "+remaining+" (aprox. "+localTime+").":
+            flight+" · "+origin+" · en "+remaining+" (aprox. "+localTime+").";
+        String title=stage==ArrivalAlertPolicy.PREPARE?
+            "✈ Prepará tu traslado":"✈ Revisá tu salida a Carrasco";
+        if(post(ctx,title,body,key,false))prefs.edit().putLong("notified_"+key,now).apply();
+    }
+
+    private static boolean post(Context ctx,String title,String body,String key,boolean landed){
+        if(!FlightAlerts.enabled(ctx)||!FlightAlerts.permitted(ctx))return false;
+        try{
+            createChannels(ctx);
+            NotificationManager nm=(NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if(nm==null)return false;
+            Intent open=new Intent(ctx,MainActivity.class).addFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent destination=PendingIntent.getActivity(ctx,919,open,
+                PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+            Notification note=new Notification.Builder(ctx,channelFor(ctx,landed))
+                .setSmallIcon(R.drawable.ic_notification_plane)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new Notification.BigTextStyle().bigText(body+
+                    " · Horarios orientativos; comprobá el estado antes de salir."))
+                .setContentIntent(destination)
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_EVENT)
+                .setColor(0xFF177E65)
+                .setColorized(false)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .build();
+            nm.notify(4900+Math.floorMod(key.hashCode(),5000),note);
+            // Explicit same-package broadcast for foreground card only; never launch an activity.
+            Intent inApp=new Intent(ACTION_UI).setPackage(ctx.getPackageName())
+                .putExtra("title",title)
+                .putExtra("body",body)
+                .putExtra("landed",landed);
+            ctx.sendBroadcast(inApp);
+            return true;
+        }catch(SecurityException ignored){return false;}
+        catch(Exception ignored){return false;}
     }
 }
