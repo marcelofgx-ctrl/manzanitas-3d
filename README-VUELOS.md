@@ -131,3 +131,11 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - No se utilizan peticiones repetidas a la API central de OSM como sustituto de Overpass por la política de uso del servicio.
 - Conserva el diseño 1.14, las alertas y listas de vuelos, pantalla encendida y solapa inferior plegable. QA aislada, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
 - Falta validación funcional física en Samsung.
+
+## v1.16.0 — Nombre de calle discreto y centrado
+- Reemplaza la franja anterior por una píldora de 28 dp de alto, centrada sobre las tarjetas «Velocidad actual» y «Límite del tramo», alineada sin invadir el ancho del botón de GPS.
+- Solo aparece el nombre de la calle en negrita 12 sp, una línea y elipsis si excede 235 dp. Sin encabezado grande ni textos adicionales.
+- Fondo tenue, borde sutil y mínimo espacio vertical: menos de la mitad del alto de las tarjetas de velocidad.
+- Conserva información de accesibilidad que aclara que la calle es aproximada y no garantiza un límite de velocidad.
+- Cambio solo visual, sin alterar Geocoder, GPS, límites OSM, avisos, vuelos, pantalla encendida o solapa inferior.
+- Rama QA aislada; no se modifica main, producción, Supabase, Mapa QT ni Quick Trip.
