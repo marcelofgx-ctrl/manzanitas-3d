@@ -89,11 +89,9 @@ public final class MainActivity extends Activity {
     private LinearLayout futureControls;
     private DriverBoard futureBoard;
     private final ScheduleApi scheduleApi=new ScheduleApi();
-    private WebView futureWeb;
     private LocalDate futureDate;
     private LocalTime futureTime = LocalTime.of(7,0);
     private int futureRequestId=0;
-    private int futurePageLoads=0;
     private boolean futureResultsVisible=false;
     private DriverBoard driverBoard;
     private List<FlightData.Flight> flights = new ArrayList<>();
@@ -460,28 +458,6 @@ public final class MainActivity extends Activity {
         futureBoard.setVisibility(View.GONE);
         flightFrame.addView(futureBoard,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
 
-        futureWeb=new WebView(this);
-        WebSettings futureSettings=futureWeb.getSettings();
-        futureSettings.setJavaScriptEnabled(true);
-        futureSettings.setDomStorageEnabled(true);
-        futureSettings.setAllowFileAccess(false);
-        futureSettings.setAllowContentAccess(false);
-        futureSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        futureWeb.setAlpha(0.01f);
-        futureWeb.setWebViewClient(new WebViewClient(){
-            @Override public void onPageFinished(WebView view,String url){
-                if(!manualBrowsing||mode!=0||!url.contains("flight.info"))return;
-                final int token=futureRequestId;
-                if(++futurePageLoads>3)return;
-                handler.postDelayed(()->applyFutureQuery(token),550);
-            }
-            @Override public void onReceivedError(WebView v,WebResourceRequest request,WebResourceError error){
-                if(request.isForMainFrame())futureFailure("No se pudo conectar con la programación.");
-            }
-        });
-        // The source needs a normal screen width to lay out its flight rows.
-        flightFrame.addView(futureWeb,new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,dp(1)));
         content.addView(flightFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         surface.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -918,7 +894,6 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         handler.removeCallbacks(refreshTask);
         if (panel != null) panel.destroy();
-        if (futureWeb != null) futureWeb.destroy();
         scheduleApi.close();
         super.onDestroy();
     }
