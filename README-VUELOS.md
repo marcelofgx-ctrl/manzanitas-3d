@@ -58,3 +58,15 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Modo Hoy y avisos locales permanecen intactos. El proveedor no ofrece seguimiento instantáneo en este modo.
 - Es una versión QA: no se ha verificado todavía la cobertura de SUMU con una clave gratuita. Requiere instalación y comprobación por el usuario.
 - No tocar Quick Trip, main, producción, Supabase ni GPS.
+
+## v1.9.0 — alertas premium para conductores
+- 40 min antes: **prepará tu traslado**; 20 min antes: **revisá tu salida a Carrasco**. Son tiempos sugeridos generales, no desplazamientos GPS calculados.
+- Se agrupan vuelos con estimaciones en una misma franja de 15 minutos para evitar avisos duplicados; también se evita la repetición de una misma etapa tras actualizar datos.
+- El aviso de aterrizaje solo se emite cuando en una consulta previa el vuelo estaba pendiente y una consulta posterior de la fuente lo marca como aterrizado. **No se confirma aterrizaje por el reloj**.
+- Alertas locales del sistema Android: sonido+vibración, solo vibración, solo visual, o apagadas. Canales configurables por Android. En segundo plano se entregan avisos pendientes pero Android puede retrasarlos por ahorro de batería.
+- Al recibir una alerta con la APK visible también se despliega durante nueve segundos una tarjeta blanca redondeada, con título y mensaje grande; hay cierre manual. Con la app minimizada se usa la notificación nativa de Android, cuya geometría depende del sistema.
+- Configuración del aviso con **Vista previa** dentro de la APK (texto de ejemplo, no es un vuelo real).
+- Hora en tarjeta de llegada: 23 sp; minutos restantes en cápsula: 16 sp; contraste reforzado. Después de aterrizaje confirmado se muestra la ventana orientativa de 25–60 min de desembarque/migraciones/equipaje, no una predicción individual.
+- La aplicación no consulta vuelos en segundo plano y por tanto **no puede detectar nuevos aterrizajes estando cerrada**. Las notificaciones anticipadas quedan programadas según la última lectura, caducan si la información tiene más de 75 min.
+- La fuente de vuelos futuros opcional de v1.8 se conserva sin cambios funcionales, con clave propia requerida y cobertura no verificada.
+- APK QA independiente `uy.vuelos.uruguay`. Rama aislada `qa/vuelos-uruguay-alertas-premium-v19-20261103` dentro de `manzanitas-3d`; no se modifican Quick Trip, Mapa QT, producción, Supabase ni `main`.
