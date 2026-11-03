@@ -44,13 +44,6 @@ public final class MainActivity extends Activity {
     private static final String DEPARTURES = "https://www.avionio.com/widget/es/mvd/departures?style=3";
     private static final TimeZone UY = TimeZone.getTimeZone("America/Montevideo");
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable refreshTask = () -> {
-        if (foreground && autoRefresh && panel != null) {
-            panel.reload();
-            scheduleAutoRefresh();
-        }
-    };
     private boolean foreground = false;
     private boolean autoRefresh = true;
     private boolean errorActive = false;
@@ -58,6 +51,13 @@ public final class MainActivity extends Activity {
     private long lastLoadedElapsed = 0L;
 
     private WebView panel;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable refreshTask = () -> {
+        if (foreground && autoRefresh && panel != null) {
+            panel.reload();
+            scheduleAutoRefresh();
+        }
+    };
     private ProgressBar progress;
     private FrameLayout browserFrame;
     private LinearLayout errorLayer;
