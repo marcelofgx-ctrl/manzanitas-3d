@@ -1,0 +1,39 @@
+name: QA inspect public flight source HTML
+on:
+  push:
+    branches: [qa/vuelos-uruguay-future-schedule-v17-20261103]
+    paths: ['.github/workflows/probe-flight-source-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public timetable DOM without publishing data
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,html
+          for url in (
+             'https://www.flight.info/MVD/arrivals',
+             'https://www.flight.info/MVD/arrivals?date=2026-11-04',
+             'https://www.flight.info/MVD/arrivals?arrivalDate=2026-11-04',
+             'https://www.flightsfrom.com/MVD/arrivals?arrivalDate=2026-11-04',
+             'https://useast.flightera.net/en/airport/Montevideo/SUMU/arrival',
+          ):
+             print('\\nSOURCE',url,flush=True)
+             try:
+               req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+               data=urllib.request.urlopen(req,timeout=12).read(500000).decode('utf-8','replace')
+               print('BYTES',len(data),'FORM',len(re.findall(r'<form\\b',data,re.I)),'TR',len(re.findall(r'<tr\\b',data,re.I)))
+               for pattern in (r'<input[^>]{0,350}>',r'<select[^>]{0,350}>',r'<table[^>]{0,200}>',r'<form[^>]{0,350}>'):
+                 elements=re.findall(pattern,data,re.I)
+                 for item in elements[:12]:print('ELEMENT',re.sub(r'\\s+',' ',item)[:350])
+               for needle in ('Arrival date','Arrival time from','2026-11-04','Arriving from','flights','calendar'):
+                 i=data.lower().find(needle.lower())
+                 if i>=0:print('SNIP',needle,re.sub(r'\\s+',' ',data[max(0,i-180):i+270])[:450])
+             except Exception as e:print('ERROR',type(e).__name__,str(e)[:160])
+          PY
