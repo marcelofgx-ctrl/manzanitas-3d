@@ -24,3 +24,6 @@ Firma debug, puede ser necesario desinstalar v1.3.1 antes de instalar v1.4.1.
 - En primer plano y minimizado la consulta manual conserva estado mientras Android mantenga el proceso; reinicios o destrucción del proceso podrían reiniciar el widget.
 - Sonidos y vibración permanecen como avisos locales basados en últimas llegadas verificadas, no push en tiempo real.
 - Sin cambios a Quick Trip, main, Supabase ni producción.
+
+## v1.5.1
+Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, evitando presentar vuelos antiguos como si pertenecieran a otro día. La consulta a días futuros se mantiene pausada mientras el usuario trabaja con los filtros.

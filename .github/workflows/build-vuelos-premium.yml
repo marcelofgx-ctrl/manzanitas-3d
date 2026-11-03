@@ -1,4 +1,4 @@
-name: Vuelos Uruguay 1.5.0 - Live and manual date modes
+name: Vuelos Uruguay 1.5.1 - Live and manual date modes
 on:
   push:
     branches: [qa/vuelos-uruguay-live-manual-v15-20261103]
@@ -35,19 +35,19 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
-          cp "$apk" Vuelos-Uruguay-Conductor-v1.5.0.apk
+          cp "$apk" Vuelos-Uruguay-Conductor-v1.5.1.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk" | tee firma.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee paquete.txt
           grep -F "package: name='uy.vuelos.uruguay'" paquete.txt
-          grep -F "versionName='1.5.0'" paquete.txt
-          sha256sum Vuelos-Uruguay-Conductor-v1.5.0.apk | tee SHA256SUMS.txt
+          grep -F "versionName='1.5.1'" paquete.txt
+          sha256sum Vuelos-Uruguay-Conductor-v1.5.1.apk | tee SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Vuelos-Uruguay-Conductor-v1.5.0
+          name: Vuelos-Uruguay-Conductor-v1.5.1
           if-no-files-found: error
           retention-days: 30
           path: |
-            Vuelos-Uruguay-Conductor-v1.5.0.apk
+            Vuelos-Uruguay-Conductor-v1.5.1.apk
             SHA256SUMS.txt
             firma.txt
             paquete.txt
@@ -57,4 +57,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create vuelos-uruguay-conductor-v1.5.0-20261103 Vuelos-Uruguay-Conductor-v1.5.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.5.0' --notes 'Modo Hoy se actualiza cada 3 minutos y reubica los proximos vuelos solo si el usuario no desplaza la lista. Modo Consulta fecha detiene recargas automaticas, conserva filtros en la sesion, ofrece enlace a panel oficial cuando Avionio no devuelve horarios. Las pruebas y firma se verifican con CI. APK de prueba independiente. No modifica Quick Trip.'
+          gh release create vuelos-uruguay-conductor-v1.5.1-20261103 Vuelos-Uruguay-Conductor-v1.5.1.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.5.1' --notes 'Impide mostrar los vuelos de hoy como si fueran de otra fecha. Modo Hoy se actualiza cada 3 minutos y reubica los proximos vuelos solo si el usuario no desplaza la lista. Modo Consulta fecha detiene recargas automaticas, conserva filtros en la sesion, ofrece enlace a panel oficial cuando Avionio no devuelve horarios. Las pruebas y firma se verifican con CI. APK de prueba independiente. No modifica Quick Trip.'
