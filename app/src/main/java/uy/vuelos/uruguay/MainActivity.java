@@ -910,6 +910,9 @@ public final class MainActivity extends Activity {
                 renderAlertsToggle();
             })
             .setNegativeButton("Cerrar",(d,w)->{})
+            .setPositiveButton("Vista previa",(d,w)->showForegroundAlert(
+                "✈ Aviso de prueba",
+                "Ejemplo · Vuelo próximo en 35 min · Llegada prevista 14:20"))
             .show();
     }
 
