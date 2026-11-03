@@ -257,8 +257,8 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         overSince=0;
         speedValue.setText("—");
         limitValue.setText("—");
-        limitValue.setBackground(pill(Color.WHITE,0xFFE1E8EE));
-        if(!enabled)stateValue.setText("GPS apagado · consulta de vuelos normal");
+        roadStatus=enabled?"GPS en pausa":"GPS apagado · tocá GPS para activar";
+        renderSpeedColors();
     }
     @Override public void onLocationChanged(Location location){
         if(!tracking || !resumed || !enabled || location==null)return;
@@ -280,25 +280,68 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             if(!resumed||!enabled||!tracking)return;
             currentLimit=match.confident?match.limitKmh:0;
             limitValue.setText(match.confident?String.valueOf(match.limitKmh):"—");
-            limitValue.setBackground(pill(Color.WHITE,match.confident?0xFFD44140:0xFFE1E8EE));
-            stateValue.setText(match.confident
-                ?(match.name.isEmpty()?"Límite OSM orientativo · señal prevalece":
-                    match.name+" · límite cartográfico orientativo")
-                :state+" · límite no disponible");
+            roadStatus=match.confident
+                ?(match.name.isEmpty()?"Límite cartográfico · señal prevalece":
+                    match.name+" · límite cartográfico")
+                :state+" · límite no disponible";
             updateWarning();
         });
         updateWarning();
     }
 
-    private void updateWarning(){
-        if(!hasUsableSpeed || currentLimit<=0 || !enabled){
-            overSince=0;speedValue.setTextColor(NAVY);return;
+    private void renderSpeedColors(){
+        int visual=SpeedColorPolicy.state(currentKmh,currentLimit);
+        int speedBackground=0xFFFFFFFF,limitBackground=0xFFFFFFFF;
+        int speedBorder=0xFFE1EAF0,limitBorder=0xFFE1EAF0;
+        int speedInk=NAVY,captionInk=MUTED;
+        if(visual==SpeedColorPolicy.AMBER){
+            speedBackground=0xFFFFF4E6;
+            limitBackground=0xFFFFFBF5;
+            speedBorder=0xFFEAC48B;limitBorder=0xFFEAC48B;
+            speedInk=0xFF9E641B;captionInk=0xFF9E641B;
+        }else if(visual==SpeedColorPolicy.RED){
+            speedBackground=0xFFFFEBE9;
+            limitBackground=0xFFFFF5F4;
+            speedBorder=0xFFCD3936;limitBorder=0xFFCD3936;
+            speedInk=0xFFBB2829;captionInk=0xFFBB2829;
         }
-        boolean excess=currentKmh>currentLimit+7;
-        speedValue.setTextColor(excess?0xFFBB3A33:NAVY);
-        if(!excess){overSince=0;return;}
+        speedTile.setBackground(pill(speedBackground,speedBorder));
+        limitTile.setBackground(pill(limitBackground,limitBorder));
+        speedValue.setTextColor(speedInk);
+        limitValue.setTextColor(visual==SpeedColorPolicy.RED?0xFFBB2829:NAVY);
+        speedCaption.setTextColor(captionInk);
+        limitCaption.setTextColor(visual==SpeedColorPolicy.RED?0xFFBB2829:MUTED);
+        if(visual==SpeedColorPolicy.RED){
+            stateValue.setText("EXCESO +"+SpeedColorPolicy.excess(currentKmh,currentLimit)+
+                " km/h · límite cartográfico orientativo");
+            stateValue.setTextColor(0xFFB02B2A);
+        }else if(visual==SpeedColorPolicy.AMBER){
+            stateValue.setText("Sobre límite +"+SpeedColorPolicy.excess(currentKmh,currentLimit)+
+                " km/h · precaución");
+            stateValue.setTextColor(0xFF96631F);
+        }else{
+            stateValue.setText(roadStatus);
+            stateValue.setTextColor(MUTED);
+        }
+        String limitDescription=currentLimit>0 ? currentLimit+" kilómetros por hora registrados":
+            "límite no disponible";
+        speedTile.setContentDescription("Velocidad actual GPS: "+
+            (currentKmh<0?"no disponible":currentKmh+" kilómetros por hora")+
+            ". "+(visual==SpeedColorPolicy.RED?"Alerta roja de exceso. ":
+                visual==SpeedColorPolicy.AMBER?"Advertencia ámbar. ":"")+
+            "Límite cartográfico: "+limitDescription);
+        limitTile.setContentDescription("Límite del tramo: "+limitDescription+
+            ". Datos de OpenStreetMap; la señalización real prevalece.");
+    }
+
+    private void updateWarning(){
+        renderSpeedColors();
+        int visual=SpeedColorPolicy.state(currentKmh,currentLimit);
+        if(visual!=SpeedColorPolicy.RED || !enabled || !hasUsableSpeed){
+            overSince=0L;return;
+        }
         long elapsed=SystemClock.elapsedRealtime();
-        if(overSince==0)overSince=elapsed;
+        if(overSince==0L)overSince=elapsed;
         if(!warnings || elapsed-overSince<5000L || elapsed-lastVibrate<45000L)return;
         lastVibrate=elapsed;
         try{
@@ -311,17 +354,24 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         }catch(Exception ignored){}
     }
     @Override public void onProviderDisabled(String provider){
-        stateValue.setText("GPS desactivado en Android");
+        currentKmh=-1;
+        currentLimit=0;
+        hasUsableSpeed=false;
+        roadStatus="GPS desactivado en Android";
         speedValue.setText("—");limitValue.setText("—");
+        overSince=0L;
+        renderSpeedColors();
     }
     private void renderToggle(){
-        gpsToggle.setText(enabled?"● GPS ON":"○ ACTIVAR GPS");
+        gpsToggle.setText(enabled?"● GPS ON":"○ GPS OFF");
         gpsToggle.setTextColor(enabled?0xFF117657:NAVY);
         gpsToggle.setBackground(pill(enabled?MINT:0xFFE6EDF2,0));
-        warningToggle.setText(warnings?"⚠ AVISO VIB. ON":"⚠ AVISO OFF");
-        warningToggle.setTextColor(warnings?0xFFB17B22:MUTED);
+        gpsToggle.setContentDescription(enabled?"Desactivar GPS":"Activar GPS para conocer tu velocidad y consultar el límite de calle");
+        warningToggle.setText(warnings?"VIB. ON":"VIB. OFF");
+        warningToggle.setTextColor(warnings?0xFF9E641B:MUTED);
+        warningToggle.setBackground(pill(warnings?0xFFFFF1DF:0xFFF4F7FA,0));
         warningToggle.setContentDescription(warnings?
-            "Vibración si la velocidad GPS supera el límite cartográfico en más de siete kilómetros por hora durante cinco segundos":
-            "Activar aviso vibratorio opcional por exceso de velocidad");
+            "Desactivar vibración al superar el límite cartográfico en 7 kilómetros por hora durante cinco segundos":
+            "Activar vibración opcional de exceso: siete kilómetros por hora sobre el límite cartográfico durante cinco segundos");
     }
 }
