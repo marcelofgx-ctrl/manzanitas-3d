@@ -47,3 +47,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Si no obtiene datos confiables, permite verificar el panel de Carrasco y abrir la fuente complementaria.
 - Datos externos sujetos a precisión/limitaciones; validación física Samsung pendiente.
 - Rama QA aislada sin modificar ningún recurso de Quick Trip ni main.
+
+## v1.8.0 — consulta de programación futura con fuente gratuita
+- Algunas webs de horarios bloquearon las consultas automatizadas con HTTP 403; por eso se evita depender de filtros HTML no verificados.
+- Nueva opción de API documentada de programación SkyLink por RapidAPI. El proveedor anuncia 1.000 consultas mensuales gratuitas, pero requiere clave personal.
+- Se pega la clave en el Samsung y se guarda cifrada localmente mediante Android Keystore AES-GCM. No hay clave incluida en el código, ni se envía a GitHub o Quick Trip.
+- La fecha y hora son controles propios; al elegir 04/11/2026 y 07:00, el filtro incluye las llegadas desde las 07:00 inclusive hasta acabar el día, si la API ofrece datos verificables para Carrasco.
+- Valida aeropuerto SUMU, fecha exacta, zona horaria local Uruguay, horario UTC y respuesta completa; alerta claramente ante HTTP 403/429, cuenta sin acceso o cobertura ausente.
+- No presenta vuelos ficticios ni afirma que el aeropuerto esté vacío si la API falla; conserva enlaces de verificación al panel oficial y una web pública de horarios.
+- Modo Hoy y avisos locales permanecen intactos. El proveedor no ofrece seguimiento instantáneo en este modo.
+- Es una versión QA: no se ha verificado todavía la cobertura de SUMU con una clave gratuita. Requiere instalación y comprobación por el usuario.
+- No tocar Quick Trip, main, producción, Supabase ni GPS.
