@@ -110,3 +110,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Se mantiene atribución visible a OpenStreetMap. Se conserva la solapa inferior 1.12 y los motores de vuelos, ETA, GPS, mapas, alertas de vuelo, y pantalla encendida.
 - Se agregan pruebas unitarias para límites normales, ámbar, rojo, cambios de tramo y límite desconocido.
 - QA aislada en manzanitas-3d, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
+
+## v1.14.0 — Diagnóstico de «Límite del tramo: N/D»
+- **0 km/h** significa vehículo detenido; **N/D** significa límite del tramo no verificable, no un límite de cero. El guion anterior se sustituyó por N/D.
+- La app ahora solicita posiciones aun cuando la velocidad es cero para identificar la calle estando estacionado; el GPS funciona únicamente en primer plano cuando el usuario lo autorizó.
+- Se consultan los tramos cercanos transitables de OpenStreetMap con y sin `maxspeed`, y se identifica la calle más cercana antes de decidir si existe un límite numérico. Esto impide atribuir a la calle actual el límite de otra calle cercana.
+- Si existe una calle identificada pero no tiene límite numérico cargado, la pantalla dice «Sin límite cargado · [calle]»; para calles paralelas ambiguas o GPS impreciso, también explica la causa.
+- Tocar «LÍMITE DEL TRAMO» abre detalles de por qué aparece N/D. La señalización física prevalece.
+- Si falla el servicio público Overpass, no se guarda una respuesta fallida como mapa vacío por cinco minutos: reintenta de forma controlada, no más de una consulta cada 90 segundos.
+- Si ambos atributos de límite direccional son numéricos y coinciden, puede utilizarlos; si difieren, no inventa un límite según una dirección desconocida.
+- Sin rastreo continuo en segundo plano, sin permisos nuevos, sin histórico de recorridos. Mantiene la advertencia de velocidad y resto de funcionalidades de Vuelos Uruguay.
+- La versión 1.13 se conserva. Todo el trabajo en QA aislada, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
