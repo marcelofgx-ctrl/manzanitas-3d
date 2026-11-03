@@ -57,6 +57,7 @@ public final class MainActivity extends Activity {
     private boolean errorActive = false;
     private int mode = 0;
     private long lastLoadedElapsed = 0L;
+    private boolean viewingOtherDate = false;
 
     private WebView panel;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -77,7 +78,6 @@ public final class MainActivity extends Activity {
     private int readToken = 0;
     private boolean priorityVisible = false;
     private boolean boardHasResults = false;
-    private boolean viewingOtherDate = false;
     private long sourceTapAt = 0L;
 
     private int dp(float points) {
