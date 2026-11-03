@@ -27,3 +27,13 @@ Firma debug, puede ser necesario desinstalar v1.3.1 antes de instalar v1.4.1.
 
 ## v1.5.1
 Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, evitando presentar vuelos antiguos como si pertenecieran a otro día. La consulta a días futuros se mantiene pausada mientras el usuario trabaja con los filtros.
+
+## v1.6.0 · interfaz conductor
+- Cabecera más compacta, tarjetas más pequeñas y visibles de un vistazo.
+- Horarios estimados vencidos sin estado de aterrizaje aparecen como SIN CONFIRMAR y nunca «EN 0 MIN».
+- La lista nativa conserva la posición al actualizar en la misma fecha; respeta 45 segundos de inactividad antes de regresar al siguiente vuelo.
+- La pantalla evita repetir el nombre del proveedor; mantiene acceso discreto «FUENTE ↗» al sitio original como acreditación y verificación.
+- El widget externo mantiene sus elementos propios.
+- La programación futura solo se muestra cuando el proveedor devuelve registros. Verificación alternativa con Carrasco oficial.
+- Alertas locales según última consulta, no push en vivo.
+- APK independiente; desarrollo temporal en rama QA aislada de manzanitas-3d (no hay repositorio exclusivo todavía); Quick Trip intacto.

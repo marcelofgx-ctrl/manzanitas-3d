@@ -69,6 +69,24 @@ public final class FlightDataTest {
             Instant.ofEpochMilli(b.flights.get(0).landingTime()).atZone(FlightData.UY).toLocalDate());
     }
 
+
+    @Test public void overdueEstimateDoesNotMeanLanded() {
+        long scheduled=LocalDate.of(2026,11,3).atTime(7,7).atZone(FlightData.UY).toInstant().toEpochMilli();
+        long clock=LocalDate.of(2026,11,3).atTime(7,14).atZone(FlightData.UY).toInstant().toEpochMilli();
+        assertEquals("SIN CONFIRMAR",FlightData.countdown(scheduled,clock));
+        FlightData.BoardSnapshot b=FlightData.parseBoardJs(JSONObject.quote(
+            "{\"selectedDate\":\"2026-11-03\",\"rows\":["+
+            "[\"07:07\",\"03 nov\",\"PTY\",\"Ciudad de Panamá\",\"CM368\",\"Copa\",\"Estimado 07:07\"]],\"sourceEmpty\":false}"),clock);
+        assertEquals(1,b.flights.size());
+        assertFalse(b.flights.get(0).landed);
+    }
+    @Test public void countdownDoesNotRoundPastToZero() {
+        long now=LocalDate.of(2026,11,3).atTime(7,14).atZone(FlightData.UY).toInstant().toEpochMilli();
+        assertEquals("AHORA",FlightData.countdown(now,now));
+        assertEquals("EN 7 MIN",FlightData.countdown(now+6*60000L+1000L,now));
+        assertEquals("SIN CONFIRMAR",FlightData.countdown(now-1000L,now));
+    }
+
     @Test public void canceledFlightsAreFlaggedAndDoNotCountAsUpcoming() {
         FlightData.BoardSnapshot b=read("{\"selectedDate\":\"2026-11-04\",\"rows\":["+
             "[\"06:10\",\"04 nov\",\"BOG\",\"Bogotá\",\"AV109\",\"Avianca\",\"Cancelado\"]],\"sourceEmpty\":false}");
