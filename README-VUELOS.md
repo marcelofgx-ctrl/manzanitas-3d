@@ -70,3 +70,12 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - La aplicación no consulta vuelos en segundo plano y por tanto **no puede detectar nuevos aterrizajes estando cerrada**. Las notificaciones anticipadas quedan programadas según la última lectura, caducan si la información tiene más de 75 min.
 - La fuente de vuelos futuros opcional de v1.8 se conserva sin cambios funcionales, con clave propia requerida y cobertura no verificada.
 - APK QA independiente `uy.vuelos.uruguay`. Rama aislada `qa/vuelos-uruguay-alertas-premium-v19-20261103` dentro de `manzanitas-3d`; no se modifican Quick Trip, Mapa QT, producción, Supabase ni `main`.
+
+## v1.10.0 — Pantalla encendida en primer plano
+- Preferencia local «Pantalla encendida mientras usás la app», activada de forma predeterminada, con interruptor en el pie de pantalla.
+- Mientras la actividad Android está visible (onResume), usa FLAG_KEEP_SCREEN_ON para impedir el apagado por inactividad.
+- Al minimizar, bloquear el teléfono, cambiar de app o perder primer plano (onPause), elimina la bandera y vuelve al comportamiento normal del celular.
+- No fuerza la app a primer plano, no bloquea el botón de apagado y no requiere servicio foreground, bloqueo de pantalla ni permisos especiales.
+- La elección ON/OFF persiste en SharedPreferences; no afecta notificaciones, vuelos, ubicación ni Quick Trip.
+- Mayor consumo de batería y posible retención de imagen si se deja la pantalla fija durante períodos prolongados; recomendamos apagar el interruptor cuando no sea necesario.
+- Firma QA y validación física final en Samsung pendiente.
