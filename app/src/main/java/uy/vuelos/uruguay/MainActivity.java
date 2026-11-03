@@ -471,7 +471,9 @@ public final class MainActivity extends Activity {
                 if(request.isForMainFrame())futureFailure("No se pudo conectar con la programación.");
             }
         });
-        flightFrame.addView(futureWeb,new FrameLayout.LayoutParams(dp(1),dp(1)));
+        // The source needs a normal screen width to lay out its flight rows.
+        flightFrame.addView(futureWeb,new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,dp(1)));
         content.addView(flightFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         surface.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 

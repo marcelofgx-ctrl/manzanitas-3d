@@ -37,3 +37,13 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - La programación futura solo se muestra cuando el proveedor devuelve registros. Verificación alternativa con Carrasco oficial.
 - Alertas locales según última consulta, no push en vivo.
 - APK independiente; desarrollo temporal en rama QA aislada de manzanitas-3d (no hay repositorio exclusivo todavía); Quick Trip intacto.
+
+## v1.7.0 — Consulta futura por fecha y hora
+- Hoy mantiene seguimiento en vivo, estado estimado y alertas locales.
+- Consultar fecha incluye selectores nativos de día y hora; desde 07:00 filtra 07:00 o posterior hasta las 23:59.
+- Fuente web complementaria de horarios programados mediante WebView local, cargada únicamente al solicitar la consulta, sin APIs de pago.
+- Un horario programado no confirma aterrizaje y no genera avisos de llegada.
+- Si no puede comprobarse que la fuente aplicó la fecha seleccionada y actualizó resultados, la app NO enseña datos como si correspondieran a ese día.
+- Si no obtiene datos confiables, permite verificar el panel de Carrasco y abrir la fuente complementaria.
+- Datos externos sujetos a precisión/limitaciones; validación física Samsung pendiente.
+- Rama QA aislada sin modificar ningún recurso de Quick Trip ni main.
