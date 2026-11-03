@@ -1,6 +1,10 @@
 package uy.vuelos.uruguay;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.text.InputType;
+import android.widget.EditText;
+import android.widget.Toast;
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.widget.DatePicker;
@@ -84,6 +88,7 @@ public final class MainActivity extends Activity {
     private TextView futureDateButton, futureTimeButton, futureSearchButton;
     private LinearLayout futureControls;
     private DriverBoard futureBoard;
+    private final ScheduleApi scheduleApi=new ScheduleApi();
     private WebView futureWeb;
     private LocalDate futureDate;
     private LocalTime futureTime = LocalTime.of(7,0);
@@ -312,7 +317,10 @@ public final class MainActivity extends Activity {
         futureSearchButton.setGravity(Gravity.CENTER);
         futureSearchButton.setPadding(dp(6),dp(12),dp(6),dp(12));
         futureSearchButton.setBackground(rounded(MINT,11,0,0));
-        futureSearchButton.setOnClickListener(v->searchFuture());
+        futureSearchButton.setOnClickListener(v->{
+            if(!ScheduleKeyStore.configured(this))showScheduleKeyDialog();
+            else searchFuture();
+        });
         futureControls.addView(futureDateButton,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1.30f));
         LinearLayout.LayoutParams timeLp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,0.85f);
         timeLp.leftMargin=dp(6);
@@ -330,7 +338,7 @@ public final class MainActivity extends Activity {
         driverToggle.setPadding(dp(10),dp(8),dp(10),dp(8));
         driverToggle.setOnClickListener(v -> {
             if(manualBrowsing){
-                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(FutureSchedule.SOURCE_URL)));}
+                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.flightstats.com/v2/flight-tracker/arrivals/MVD")));}
                 catch(Exception ignored){}
                 return;
             }
@@ -613,8 +621,10 @@ public final class MainActivity extends Activity {
         if(driverToggle!=null)driverToggle.setText("VER FUENTE ↗");
         renderModeTabs();
         renderAuto();
-        if(!futureResultsVisible)searchFuture();
-        else if(futureBoard!=null)futureBoard.setVisibility(View.VISIBLE);
+        if(!futureResultsVisible){
+            if(ScheduleKeyStore.configured(this)) searchFuture();
+            else showScheduleNotConnected();
+        }else if(futureBoard!=null)futureBoard.setVisibility(View.VISIBLE);
         if(status != null)status.setText("CONSULTA MANUAL · fecha y hora propias · sin actualización automática");
     }
 
@@ -714,6 +724,7 @@ public final class MainActivity extends Activity {
     private void updateFutureFilters(){
         if(futureDateButton!=null)futureDateButton.setText("◷ "+futureDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         if(futureTimeButton!=null)futureTimeButton.setText("≥ "+futureTime.toString());
+        if(futureSearchButton!=null)futureSearchButton.setText(ScheduleKeyStore.configured(this)?"BUSCAR":"CONECTAR");
     }
 
     private void saveFutureFilters(){
@@ -721,51 +732,84 @@ public final class MainActivity extends Activity {
             .putInt("futureHour",futureTime.getHour()).apply();
     }
 
+    private void showScheduleNotConnected(){
+        if(sourceWarning!=null){
+            sourceWarning.setText("Para consultar horarios futuros, conectá una fuente gratuita con clave propia. Tocá CONECTAR. Los vuelos de hoy siguen funcionando sin clave.");
+            sourceWarning.setVisibility(View.VISIBLE);
+        }
+        if(status!=null)status.setText("Programación futura: sin fuente conectada");
+    }
+
+    private void showScheduleKeyDialog(){
+        LinearLayout content=new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20),dp(6),dp(20),dp(6));
+        TextView description=label("La programación por fecha requiere una clave gratuita de SkyLink en RapidAPI. La clave se guarda cifrada únicamente en este Samsung; no se envía a GitHub ni a Quick Trip.",13,TEXT,false);
+        description.setPadding(0,dp(4),0,dp(12));
+        content.addView(description);
+        EditText field=new EditText(this);
+        field.setSingleLine(true);
+        field.setTextSize(14);
+        field.setHint("Pegá tu clave de RapidAPI");
+        field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        content.addView(field);
+        TextView plan=label("El proveedor anuncia un plan de 1.000 consultas al mes sin tarjeta. La cobertura de Carrasco debe verificarse.",11,SECONDARY,false);
+        plan.setPadding(0,dp(12),0,0);
+        content.addView(plan);
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle("Conectar programación futura")
+            .setView(content)
+            .setNegativeButton("Cancelar",(d,w)->{})
+            .setNeutralButton("Ver plan gratuito",(d,w)->{
+                try{
+                    startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://rapidapi.com/search/skylink-api")));
+                }catch(Exception ignored){}
+            })
+            .setPositiveButton("Guardar",null)
+            .create();
+        dialog.setOnShowListener(d-> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            try{
+                ScheduleKeyStore.save(this,field.getText().toString());
+                field.setText("");
+                dialog.dismiss();
+                updateFutureFilters();
+                Toast.makeText(this,"Clave guardada en este dispositivo",Toast.LENGTH_SHORT).show();
+                if(manualBrowsing)searchFuture();
+            }catch(Exception e){
+                field.setError("Revisá la clave y volvé a intentar.");
+            }
+        }));
+        dialog.show();
+    }
+
     private void searchFuture(){
-        if(!manualBrowsing||mode!=0||futureWeb==null)return;
+        if(!manualBrowsing||mode!=0)return;
+        if(!ScheduleKeyStore.configured(this)){showScheduleNotConnected();return;}
         futureResultsVisible=false;
-        futureRequestId++;
-        futurePageLoads=0;
+        final int token=++futureRequestId;
+        final LocalDate day=futureDate;
+        final LocalTime from=futureTime;
         saveFutureFilters();
         if(futureBoard!=null)futureBoard.setVisibility(View.GONE);
         if(sourceWarning!=null){
-            sourceWarning.setText("Consultando programación del "+futureDate+
-                " desde "+futureTime+" · verificando la fecha…");
+            sourceWarning.setText("Consultando llegadas programadas el "+day+" desde las "+from+"…");
             sourceWarning.setVisibility(View.VISIBLE);
         }
-        status.setText("Programación prevista · no es seguimiento en vivo");
-        futureWeb.loadUrl(FutureSchedule.SOURCE_URL);
-    }
-
-    private void applyFutureQuery(int token){
-        if(token!=futureRequestId||!manualBrowsing||futureWeb==null)return;
-        futureWeb.evaluateJavascript(FutureSchedule.applyDateJs(futureDate),response->{
-            if(token!=futureRequestId)return;
-            handler.postDelayed(()->readFutureQuery(token,0),1600);
-        });
-    }
-
-    private void readFutureQuery(int token,int attempt){
-        if(token!=futureRequestId||!manualBrowsing||futureWeb==null)return;
-        futureWeb.evaluateJavascript(FutureSchedule.EXTRACT_JS,json->{
-            if(token!=futureRequestId||!manualBrowsing)return;
-            FutureSchedule.Result result=FutureSchedule.parse(json,futureDate,futureTime);
-            if(result.verified && !result.flights.isEmpty()){
+        status.setText("Consultando horarios programados · no son aterrizajes confirmados");
+        scheduleApi.fetch(ScheduleKeyStore.read(this),day,from,result->{
+            if(token!=futureRequestId||!manualBrowsing||mode!=0||
+                !day.equals(futureDate)||!from.equals(futureTime))return;
+            if(result.success&&!result.flights.isEmpty()){
                 futureResultsVisible=true;
-                futureBoard.render(result.flights,futureDate,false);
+                futureBoard.render(result.flights,day,false);
                 futureBoard.setVisibility(View.VISIBLE);
                 if(sourceWarning!=null)sourceWarning.setVisibility(View.GONE);
-                status.setText(result.flights.size()+" vuelos programados desde "+futureTime+
+                status.setText(result.flights.size()+" vuelos programados desde "+from+
                     " · fuente complementaria · sin confirmación de aterrizaje");
-            }else if(attempt<2 && futurePageLoads<=3){
-                handler.postDelayed(()->readFutureQuery(token,attempt+1),1200);
             }else{
-                String message=result.verified && result.sourceRows>0 ?
-                    "La fuente no muestra más vuelos después de "+futureTime+
-                    ". Comprobá la programación original." :
-                    "No se pudo verificar la programación para "+futureDate+
-                    ". Consultá la fuente directamente.";
-                futureFailure(message);
+                futureFailure(result.message.isEmpty()?
+                    "La fuente gratuita no ofrece horarios comprobables para esta fecha.":result.message);
             }
         });
     }
@@ -778,7 +822,7 @@ public final class MainActivity extends Activity {
             sourceWarning.setText(reason+"  ·  TOCÁ PARA COMPROBAR EN CARRASCO ↗");
             sourceWarning.setVisibility(View.VISIBLE);
         }
-        status.setText("Fecha y hora conservadas · sin datos verificables");
+        status.setText("Fecha y hora conservadas · programación no verificada");
     }
 
     private void renderAlertsToggle(){
@@ -875,6 +919,7 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(refreshTask);
         if (panel != null) panel.destroy();
         if (futureWeb != null) futureWeb.destroy();
+        scheduleApi.close();
         super.onDestroy();
     }
 }
