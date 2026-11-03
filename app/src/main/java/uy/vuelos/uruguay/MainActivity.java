@@ -136,7 +136,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
-        hero.setPadding(dp(18), dp(17), dp(18), dp(17));
+        hero.setPadding(dp(15), dp(9), dp(15), dp(11));
         hero.setBackgroundColor(NAVY);
 
         LinearLayout top = new LinearLayout(this);
@@ -146,14 +146,14 @@ public final class MainActivity extends Activity {
         icon.setImageResource(R.drawable.ic_brand_plane);
         icon.setBackground(rounded(DARK, 14, 0xFF25465E, 1));
         icon.setPadding(dp(6), dp(6), dp(6), dp(6));
-        top.addView(icon, new LinearLayout.LayoutParams(dp(47), dp(47)));
+        top.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
         brand.setPadding(dp(11), 0, 0, 0);
-        TextView title = label("VUELOS", 21, WHITE, true);
+        TextView title = label("VUELOS", 19, WHITE, true);
         title.setLetterSpacing(0.06f);
-        TextView line2 = label("U R U G U A Y", 9, MINT, true);
+        TextView line2 = label("U R U G U A Y", 8, MINT, true);
         line2.setLetterSpacing(0.13f);
         brand.addView(title);
         brand.addView(line2);
@@ -173,21 +173,21 @@ public final class MainActivity extends Activity {
         TextView eyebrow = label("AEROPUERTO INTERNACIONAL · MVD", 10, MINT, true);
         eyebrow.setLetterSpacing(0.1f);
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        ep.topMargin = dp(20);
+        ep.topMargin = dp(10);
         hero.addView(eyebrow, ep);
 
-        heading = label("Llegadas a Carrasco", 26, WHITE, true);
+        heading = label("Llegadas a Carrasco", 22, WHITE, true);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         hp.topMargin = dp(5);
         hero.addView(heading, hp);
-        subheading = label("Horarios y estado de los vuelos", 13, 0xFFB7CBDA, false);
+        subheading = label("Horarios y estado de vuelos", 11, 0xFFB7CBDA, false);
         hero.addView(subheading);
 
         LinearLayout tabBox = new LinearLayout(this);
         tabBox.setPadding(dp(4), dp(4), dp(4), dp(4));
         tabBox.setBackground(rounded(DARK, 16, 0xFF34536A, 1));
-        LinearLayout.LayoutParams tabsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(51));
-        tabsParams.topMargin = dp(18);
+        LinearLayout.LayoutParams tabsParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44));
+        tabsParams.topMargin = dp(10);
         arrivalTab = label("✈  Llegadas", 14, NAVY, true);
         arrivalTab.setGravity(Gravity.CENTER);
         arrivalTab.setContentDescription("Ver arribos al aeropuerto de Carrasco");
@@ -203,7 +203,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout info = new LinearLayout(this);
         info.setGravity(Gravity.CENTER_VERTICAL);
-        info.setPadding(dp(17), dp(11), dp(17), dp(11));
+        info.setPadding(dp(14), dp(6), dp(14), dp(6));
         info.setBackgroundColor(WHITE);
         LinearLayout infoLeft = new LinearLayout(this);
         infoLeft.setOrientation(LinearLayout.VERTICAL);
@@ -221,7 +221,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout sep = new LinearLayout(this);
         sep.setBackgroundColor(BACKGROUND);
-        root.addView(sep, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10)));
+        root.addView(sep, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6)));
 
         FrameLayout surface = new FrameLayout(this);
         surface.setBackground(rounded(WHITE, 16, 0xFFE0E8EF, 1));
@@ -237,17 +237,17 @@ public final class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         TextView caption = label("   MOVIMIENTOS DE VUELOS", 11, 0xFF5C788D, true);
         caption.setLetterSpacing(0.08f);
-        caption.setPadding(dp(10), dp(12), dp(10), dp(9));
+        caption.setPadding(dp(9), dp(7), dp(9), dp(5));
         LinearLayout modeBar = new LinearLayout(this);
-        modeBar.setPadding(dp(8),dp(7),dp(8),dp(2));
+        modeBar.setPadding(dp(8),dp(4),dp(8),dp(2));
         modeBar.setGravity(Gravity.CENTER_VERTICAL);
         liveModeTab = label("●  HOY · EN VIVO",12,TEXT,true);
         liveModeTab.setGravity(Gravity.CENTER);
-        liveModeTab.setPadding(dp(5),dp(11),dp(5),dp(11));
+        liveModeTab.setPadding(dp(5),dp(8),dp(5),dp(8));
         liveModeTab.setOnClickListener(v -> returnToLive());
         manualModeTab = label("◷  CONSULTAR FECHA",12,TEXT,true);
         manualModeTab.setGravity(Gravity.CENTER);
-        manualModeTab.setPadding(dp(5),dp(11),dp(5),dp(11));
+        manualModeTab.setPadding(dp(5),dp(8),dp(5),dp(8));
         manualModeTab.setOnClickListener(v -> enterManualBrowsing(true));
         LinearLayout.LayoutParams liveLp = new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
         liveLp.rightMargin=dp(4);
@@ -349,7 +349,7 @@ public final class MainActivity extends Activity {
                 if (!errorActive) {
                     lastLoadedElapsed = SystemClock.elapsedRealtime();
                     lastUpdate.setText("Consultado " + localClock());
-                    status.setText("Fuente Avionio · Horarios sujetos a cambios");
+                    status.setText("Consultando vuelos · horarios orientativos");
                     if(mode == 0) {
                         final int token=++readToken;
                         handler.postDelayed(() -> extractFlights(token,0),950);
@@ -404,7 +404,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
-        footer.setPadding(dp(16), dp(6), dp(16), dp(12));
+        footer.setPadding(dp(13), dp(3), dp(13), dp(7));
 
         LinearLayout firstFooter = new LinearLayout(this);
         firstFooter.setGravity(Gravity.CENTER_VERTICAL);
@@ -412,7 +412,7 @@ public final class MainActivity extends Activity {
         firstFooter.addView(lastUpdate, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         autoSwitch = label("", 11, 0xFF0D8468, true);
         autoSwitch.setGravity(Gravity.CENTER);
-        autoSwitch.setPadding(dp(10), dp(7), dp(10), dp(7));
+        autoSwitch.setPadding(dp(9), dp(5), dp(9), dp(5));
         autoSwitch.setOnClickListener(v -> {
             if(manualBrowsing)returnToLive();
             else toggleAuto();
@@ -421,12 +421,12 @@ public final class MainActivity extends Activity {
         footer.addView(firstFooter);
         LinearLayout noticeBar = new LinearLayout(this);
         noticeBar.setGravity(Gravity.CENTER_VERTICAL);
-        noticeBar.setPadding(0,dp(6),0,dp(6));
-        TextView note=label("Avisos basados en última consulta",11,SECONDARY,false);
+        noticeBar.setPadding(0,dp(3),0,dp(3));
+        TextView note=label("Avisos según última consulta",10,SECONDARY,false);
         noticeBar.addView(note,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         alertsToggle=label("",11,TEXT,true);
         alertsToggle.setGravity(Gravity.CENTER);
-        alertsToggle.setPadding(dp(10),dp(9),dp(10),dp(9));
+        alertsToggle.setPadding(dp(9),dp(6),dp(9),dp(6));
         alertsToggle.setOnClickListener(v -> toggleFlightAlerts());
         noticeBar.addView(alertsToggle);
         footer.addView(noticeBar);
@@ -434,11 +434,11 @@ public final class MainActivity extends Activity {
         LinearLayout secondFooter = new LinearLayout(this);
         secondFooter.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        sp.topMargin = dp(6);
-        status = label("Fuente Avionio · Horarios sujetos a cambios", 10, SECONDARY, false);
+        sp.topMargin = dp(3);
+        status = label("Horarios orientativos · Fuente externa", 10, SECONDARY, false);
         secondFooter.addView(status, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView copyright = label("AVIONIO", 10, 0xFF267FA1, true);
-        copyright.setContentDescription("Abrir la fuente Avionio");
+        TextView copyright = label("FUENTE ↗", 10, 0xFF267FA1, true);
+        copyright.setContentDescription("Abrir la fuente de datos del panel");
         copyright.setOnClickListener(v -> {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.avionio.com/es"))); }
             catch (Exception ignored) {}
@@ -554,7 +554,7 @@ public final class MainActivity extends Activity {
             LocalDate today=Instant.ofEpochMilli(now).atZone(FlightData.UY).toLocalDate();
             if(board.parsed) {
                 if(sourceWarning!=null){
-                    sourceWarning.setText("Avionio no devuelve vuelos para esta consulta. No confirma ausencia de arribos. Ver Carrasco oficial ↗");
+                    sourceWarning.setText("La fuente no ofrece registros para esta fecha. No confirma ausencia de arribos. Ver panel oficial ↗");
                     sourceWarning.setVisibility(board.sourceEmpty?View.VISIBLE:View.GONE);
                 }
                 flights=board.flights;
@@ -580,14 +580,14 @@ public final class MainActivity extends Activity {
                 renderAuto();
                 scheduleAutoRefresh();
                 if(board.sourceEmpty){
-                    status.setText("Avionio no muestra registros · no equivale a aeropuerto sin vuelos");
+                    status.setText("Sin registros en la fuente · no confirma ausencia de vuelos");
                     // Do not cancel earlier alerts when the user browses a future date.
                 }else if(viewingOtherDate){
-                    status.setText("Avionio · "+flights.size()+" arribos de la fecha seleccionada · sin alertas futuras");
+                    status.setText(flights.size()+" arribos de la fecha consultada · alertas solo para hoy");
                 }else if(FlightAlerts.enabled(this)){
                     int scheduled=FlightAlerts.schedule(this,flights,now);
-                    status.setText("Avionio · "+flights.size()+" arribos · "+scheduled+" avisos programados");
-                }else status.setText("Avionio · "+flights.size()+" arribos identificados");
+                    status.setText(flights.size()+" llegadas · "+scheduled+" avisos programados");
+                }else status.setText(flights.size()+" llegadas identificadas · datos externos");
             } else if(attempt<2){
                 handler.postDelayed(() -> extractFlights(token,attempt+1),1600);
             } else {
