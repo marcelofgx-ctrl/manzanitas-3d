@@ -17,10 +17,10 @@ jobs:
           import urllib.request,urllib.parse,urllib.error,json,time
           # Representative non-user city-center coordinates; not the driver's location.
           lat,lon=-34.906,-56.193
-          q=('[out:json][timeout:16];way(around:650,%.6f,%.6f)'
+          q=('[out:json][timeout:16];way(around:350,%.6f,%.6f)'
              '["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|'
              'unclassified|living_street|service|road)(|_link)$"];out tags geom;' % (lat,lon))
-          for server in ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']:
+          for server in ['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter']:
               print('PROBE',server, 'query length',len(q),flush=True)
               try:
                   data=urllib.parse.urlencode({'data':q}).encode()
