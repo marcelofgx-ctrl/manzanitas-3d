@@ -72,16 +72,16 @@ public final class DriverBoard extends ScrollView {
 
         LinearLayout firstRow=new LinearLayout(getContext());
         firstRow.setGravity(Gravity.CENTER_VERTICAL);
-        firstRow.addView(text(f.etaLabel(),21,TEXT,true));
+        firstRow.addView(text(f.etaLabel(),23,TEXT,true));
         String desc=f.landed?"ATERRIZADO":f.canceled?"CANCELADO":
             uncertain?"SIN CONFIRMAR":today?FlightData.countdown(f.landingTime(),now):"PROGRAMADO";
-        TextView pill=text(desc,10,uncertain?AMBER:neutral?GREY:TEAL,true);
+        TextView pill=text(desc,16,uncertain?AMBER:neutral?GREY:TEAL,true);
         pill.setGravity(Gravity.CENTER);
-        pill.setPadding(dp(9),dp(5),dp(9),dp(5));
+        pill.setPadding(dp(12),dp(7),dp(12),dp(7));
         pill.setBackground(bg(uncertain?0xFFFBE8C8:neutral?0xFFE8EDF2:0xFFCCF0E2,
             uncertain?0xFFFBE8C8:neutral?0xFFE8EDF2:0xFFCCF0E2));
         LinearLayout.LayoutParams pillParams=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        pillParams.leftMargin=dp(10);
+        pillParams.leftMargin=dp(12);
         firstRow.addView(pill,pillParams);
         card.addView(firstRow);
 
@@ -91,8 +91,13 @@ public final class DriverBoard extends ScrollView {
 
         String detail=f.flightNo+" · "+f.airline+(f.codeshares>1?" · +"+(f.codeshares-1)+" códigos":"");
         card.addView(text(detail,10,GREY,false));
+        if(f.landed){
+            TextView passenger=text("Salida de pasajeros: puede demorar entre 25 y 60 min tras aterrizar (orientativo)",11,GREY,false);
+            passenger.setPadding(0,dp(5),0,dp(2));
+            card.addView(passenger);
+        }
         if(uncertain){
-            TextView pending=text("Horario vencido; no hay confirmación de aterrizaje",10,AMBER,false);
+            TextView pending=text("Horario vencido; no hay confirmación de aterrizaje",11,AMBER,false);
             pending.setPadding(0,dp(3),0,0);
             card.addView(pending);
         }else if(f.status!=null && !f.status.isEmpty() && !"programado".equalsIgnoreCase(f.status.trim())){
