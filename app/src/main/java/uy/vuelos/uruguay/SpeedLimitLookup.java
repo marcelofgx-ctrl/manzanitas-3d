@@ -38,7 +38,7 @@ public final class SpeedLimitLookup {
     private int generation=0;
 
     public void resume(){alive=true;}
-    public void pause(){alive=false;generation++;} // async completions may never update a hidden app
+    public void pause(){alive=false;generation++;pending=false;} // no stale query can update a hidden app
     public void close(){pause();worker.shutdownNow();}
 
     public void onLocation(Location pos,Callback onResult){

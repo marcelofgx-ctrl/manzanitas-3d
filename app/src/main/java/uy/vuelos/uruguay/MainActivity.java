@@ -88,6 +88,7 @@ public final class MainActivity extends Activity {
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle, awakeToggle;
+    private RoadSpeedPanel roadSpeedPanel;
     private boolean keepScreenAwake = true;
     private LinearLayout foregroundAlertCard;
     private TextView foregroundAlertTitle, foregroundAlertBody;
@@ -258,6 +259,10 @@ public final class MainActivity extends Activity {
         info.addView(pill);
         root.addView(info);
         updateClock();
+
+        roadSpeedPanel=new RoadSpeedPanel(this);
+        root.addView(roadSpeedPanel,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout sep = new LinearLayout(this);
         sep.setBackgroundColor(BACKGROUND);
@@ -951,6 +956,8 @@ public final class MainActivity extends Activity {
         if(code==303){
             if(result.length>0 && result[0]==PackageManager.PERMISSION_GRANTED)enableFlightAlerts();
             else status.setText("Sin permisos de notificación: alertas desactivadas");
+        } else if(code==RoadSpeedPanel.REQUEST_LOCATION && roadSpeedPanel!=null){
+            roadSpeedPanel.permissionResult(result);
         }
     }
 
@@ -1004,6 +1011,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         foreground = true;
         applyKeepScreenAwake();
+        if(roadSpeedPanel!=null)roadSpeedPanel.resume();
         if(!alertReceiverRegistered){
             IntentFilter filter=new IntentFilter(FlightAlertReceiver.ACTION_UI);
             if(Build.VERSION.SDK_INT>=33)
@@ -1022,6 +1030,7 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() {
         foreground = false;
         applyKeepScreenAwake();
+        if(roadSpeedPanel!=null)roadSpeedPanel.pause();
         if(alertReceiverRegistered){
             try{unregisterReceiver(foregroundAlertReceiver);}catch(Exception ignored){}
             alertReceiverRegistered=false;
@@ -1047,6 +1056,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         handler.removeCallbacks(refreshTask);
         if (panel != null) panel.destroy();
+        if(roadSpeedPanel!=null)roadSpeedPanel.close();
         scheduleApi.close();
         super.onDestroy();
     }
