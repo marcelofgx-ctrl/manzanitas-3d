@@ -23,11 +23,11 @@ public final class FlightDataTest {
         assertEquals(LocalDate.of(2026,11,4),b.selectedDate);
         assertTrue(b.parsed);
         assertEquals(3,b.flights.size()); // two codeshares from Lima => one physical flight
-        assertEquals("Bogotá",b.flights.get(0).origin);
-        assertEquals("Lima",b.flights.get(1).origin);
-        assertEquals(2,b.flights.get(1).codeshares);
-        assertEquals("06:06",b.flights.get(1).etaLabel());
-        assertEquals(LocalDate.of(2026,11,4),b.flights.get(1).day());
+        assertEquals("Lima",b.flights.get(0).origin); // estimated 06:06, before Bogotá 06:10
+        assertEquals("Bogotá",b.flights.get(1).origin);
+        assertEquals(2,b.flights.get(0).codeshares);
+        assertEquals("06:06",b.flights.get(0).etaLabel());
+        assertEquals(LocalDate.of(2026,11,4),b.flights.get(0).day());
     }
 
     @Test public void emptySourceIsNotAClaimOfNoScheduledFlights() {
