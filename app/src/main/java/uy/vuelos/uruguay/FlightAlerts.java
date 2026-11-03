@@ -33,13 +33,14 @@ public final class FlightAlerts {
             ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
     }
 
-    private static PendingIntent token(Context ctx,int index,String body,long eta,long fetched){
+    private static PendingIntent token(Context ctx,int index,String body,long eta,long fetched,String groupKey){
         Intent i=new Intent(ctx,FlightAlertReceiver.class)
             .setAction("uy.vuelos.uruguay.ACTION_FLIGHT_ALERT")
             .putExtra("id",1800+index)
             .putExtra("body",body)
             .putExtra("eta",eta)
-            .putExtra("fetched",fetched);
+            .putExtra("fetched",fetched)
+            .putExtra("group_key",groupKey);
         return PendingIntent.getBroadcast(ctx,1800+index,i,
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     }
@@ -70,11 +71,14 @@ public final class FlightAlerts {
             group.add(f);
         }
         AlarmManager alarms=(AlarmManager)ctx.getSystemService(Context.ALARM_SERVICE);
+        SharedPreferences history=ctx.getSharedPreferences(SETTINGS,Context.MODE_PRIVATE);
         int count=0;
         for(Group group:groups.values()){
             if(count>=MAX_EVENTS)break;
             FlightData.Flight first=group.flights.get(0);
             long arrival=group.earliest;
+            String key=String.valueOf((arrival/FIFTEEN)*FIFTEEN);
+            if(history.getLong("notified_"+key,0L)>0L)continue;
             long notifyAt=Math.max(now+10000L,arrival-25*MINUTE);
             if(notifyAt >= arrival)continue;
             DateTimeFormatter time=DateTimeFormatter.ofPattern("HH:mm").withZone(FlightData.UY);
@@ -82,7 +86,7 @@ public final class FlightAlerts {
             String body=group.flights.size()==1
                 ?first.origin+" · "+first.flightNo+" · previsto "+label
                 :group.flights.size()+" vuelos previstos alrededor de "+label;
-            PendingIntent ticket=token(ctx,count,body,arrival,fetched);
+            PendingIntent ticket=token(ctx,count,body,arrival,fetched,key);
             alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,notifyAt,ticket);
             count++;
         }

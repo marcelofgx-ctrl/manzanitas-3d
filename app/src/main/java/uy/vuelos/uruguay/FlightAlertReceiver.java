@@ -35,6 +35,10 @@ public final class FlightAlertReceiver extends BroadcastReceiver {
         long fetched=intent.getLongExtra("fetched",0), eta=intent.getLongExtra("eta",0), now=System.currentTimeMillis();
         // Fail closed on stale data and outdated flights, since the app does not monitor live while minimized.
         if(fetched<=0 || now-fetched>75*60000L || eta < now-25*60000L) return;
+        String key=intent.getStringExtra("group_key");
+        if(key==null || !key.matches("\\d{1,15}"))return;
+        android.content.SharedPreferences history=context.getSharedPreferences(FlightAlerts.SETTINGS,Context.MODE_PRIVATE);
+        if(history.getLong("notified_"+key,0L)>0L)return;
         String body=intent.getStringExtra("body");
         if(body==null || body.isEmpty()) return;
         createChannel(context);
@@ -54,5 +58,6 @@ public final class FlightAlertReceiver extends BroadcastReceiver {
             .build();
         NotificationManager mgr=(NotificationManager)context.getSystemService(Context.NOTIFICATION_SERVICE);
         mgr.notify(intent.getIntExtra("id",1000),notification);
+        history.edit().putLong("notified_"+key,now).apply();
     }
 }
