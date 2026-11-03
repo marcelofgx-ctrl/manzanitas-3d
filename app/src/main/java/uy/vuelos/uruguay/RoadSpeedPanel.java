@@ -23,6 +23,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,7 +39,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     private LocationManager locationManager;
     private final TextView speedValue, limitValue, stateValue, gpsToggle, warningToggle;
     private LinearLayout speedTile, limitTile;
-    private TextView speedCaption, limitCaption, streetValue, streetCaption;
+    private TextView speedCaption, limitCaption, streetValue;
     private String nearbyStreet="", mapStreet="";
     private String roadStatus = "Límite no disponible";
     private boolean resumed=false, tracking=false, enabled, warnings;
@@ -56,21 +57,30 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         setBackgroundColor(0xFFF7FAFC);
         setPadding(dp(11),dp(8),dp(11),dp(6));
 
-        // Independent reverse-geocoded street row: remains useful if Overpass is down.
-        LinearLayout streetRow=new LinearLayout(a);
-        streetRow.setOrientation(VERTICAL);
-        streetRow.setPadding(dp(11),dp(5),dp(11),dp(6));
-        streetRow.setBackground(pill(0xFFEAF2F7,0));
-        streetCaption=text("CALLE CERCANA · APROX.",9,0xFF53738A,true);
-        streetRow.addView(streetCaption);
-        streetValue=text("Activá GPS para ver la calle",14,NAVY,true);
+        // Subtle pill centered above the two readings, not over the GPS button.
+        // 28dp high (less than half the height of the speedometer tiles).
+        LinearLayout streetLine=new LinearLayout(a);
+        streetLine.setGravity(Gravity.CENTER_VERTICAL);
+        FrameLayout streetArea=new FrameLayout(a);
+        streetValue=text("Activá GPS",12,NAVY,true);
         streetValue.setSingleLine(true);
         streetValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        streetRow.addView(streetValue);
+        streetValue.setGravity(Gravity.CENTER);
+        streetValue.setMinWidth(dp(120));
+        streetValue.setMaxWidth(dp(235));
+        streetValue.setPadding(dp(10),dp(2),dp(10),dp(2));
+        streetValue.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
+        FrameLayout.LayoutParams pillParams=new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,dp(28),Gravity.CENTER);
+        streetArea.addView(streetValue,pillParams);
+        streetLine.addView(streetArea,new LinearLayout.LayoutParams(
+            0,dp(28),1f));
+        // The 70dp spacer lines the badge up between velocity and limit.
+        streetLine.addView(new View(a),new LinearLayout.LayoutParams(dp(70),dp(1)));
         LinearLayout.LayoutParams streetParams=new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-        streetParams.bottomMargin=dp(6);
-        addView(streetRow,streetParams);
+            ViewGroup.LayoutParams.MATCH_PARENT,dp(28));
+        streetParams.bottomMargin=dp(5);
+        addView(streetLine,streetParams);
 
         // Phone-width layout: two large readings and one narrow control column.
         LinearLayout meters=new LinearLayout(a);
@@ -331,22 +341,19 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     }
 
     private void renderStreetName(){
-        if(streetValue==null||streetCaption==null)return;
+        if(streetValue==null)return;
         if(!enabled){
-            streetCaption.setText("CALLE CERCANA · APROX.");
-            streetValue.setText("Activá GPS para ver la calle");
+            streetValue.setText("Activá GPS");
         }else if(!tracking){
-            streetCaption.setText("CALLE CERCANA · APROX.");
-            streetValue.setText("Esperando señal GPS…");
+            streetValue.setText("Esperando GPS…");
         }else if(!mapStreet.isEmpty()){
-            streetCaption.setText("CALLE CERCANA · OPENSTREETMAP");
             streetValue.setText(mapStreet);
         }else{
-            streetCaption.setText("CALLE CERCANA · APROX.");
-            streetValue.setText(nearbyStreet.isEmpty()?"Buscando nombre de calle…":nearbyStreet);
+            String name=nearbyStreet;
+            streetValue.setText(name.isEmpty()?"Buscando calle…":name);
         }
-        streetValue.setContentDescription("Calle aproximada: "+streetValue.getText()+
-            ". Puede corresponder a una vía cercana.");
+        streetValue.setContentDescription("Calle cercana aproximada: "+streetValue.getText()+
+            ". El nombre no confirma el límite de velocidad.");
     }
 
     private void renderSpeedColors(){
