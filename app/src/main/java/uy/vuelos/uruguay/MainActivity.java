@@ -1,6 +1,11 @@
 package uy.vuelos.uruguay;
 
 import android.app.Activity;
+import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
+import android.widget.DatePicker;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -76,6 +81,15 @@ public final class MainActivity extends Activity {
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle;
     private TextView liveModeTab, manualModeTab, sourceWarning;
+    private TextView futureDateButton, futureTimeButton, futureSearchButton;
+    private LinearLayout futureControls;
+    private DriverBoard futureBoard;
+    private WebView futureWeb;
+    private LocalDate futureDate;
+    private LocalTime futureTime = LocalTime.of(7,0);
+    private int futureRequestId=0;
+    private int futurePageLoads=0;
+    private boolean futureResultsVisible=false;
     private DriverBoard driverBoard;
     private List<FlightData.Flight> flights = new ArrayList<>();
     private int readToken = 0;
@@ -122,6 +136,12 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(NAVY);
         getWindow().setNavigationBarColor(NAVY);
         autoRefresh = getPreferences(MODE_PRIVATE).getBoolean("autoRefresh", true);
+        LocalDate tomorrow=LocalDate.now(FlightData.UY).plusDays(1);
+        String savedDate=getPreferences(MODE_PRIVATE).getString("futureDate",tomorrow.toString());
+        try{futureDate=LocalDate.parse(savedDate);}catch(Exception ignored){futureDate=tomorrow;}
+        if(futureDate.isBefore(LocalDate.now(FlightData.UY)))futureDate=tomorrow;
+        int h=getPreferences(MODE_PRIVATE).getInt("futureHour",7);
+        futureTime=LocalTime.of(Math.max(0,Math.min(23,h)),0);
         createInterface();
         selectMode(savedInstanceState == null ? 0 : savedInstanceState.getInt("mode", 0));
         renderAuto();
@@ -258,14 +278,64 @@ public final class MainActivity extends Activity {
         content.addView(modeBar);
         renderModeTabs();
 
+        futureControls=new LinearLayout(this);
+        futureControls.setGravity(Gravity.CENTER_VERTICAL);
+        futureControls.setPadding(dp(9),dp(6),dp(9),dp(8));
+        futureControls.setVisibility(View.GONE);
+        futureDateButton=label("",13,TEXT,true);
+        futureDateButton.setGravity(Gravity.CENTER);
+        futureDateButton.setPadding(dp(9),dp(11),dp(9),dp(11));
+        futureDateButton.setBackground(rounded(0xFFF0F6F8,11,0xFFDEE8EF,1));
+        futureDateButton.setOnClickListener(v->{
+            LocalDate d=futureDate;
+            DatePickerDialog dialog=new DatePickerDialog(this,(picker,year,month,day)->{
+                futureDate=LocalDate.of(year,month+1,day);
+                updateFutureFilters();
+                saveFutureFilters();
+            },d.getYear(),d.getMonthValue()-1,d.getDayOfMonth());
+            dialog.getDatePicker().setMinDate(System.currentTimeMillis()-24L*60L*60L*1000L);
+            dialog.show();
+        });
+        futureTimeButton=label("",13,TEXT,true);
+        futureTimeButton.setGravity(Gravity.CENTER);
+        futureTimeButton.setPadding(dp(9),dp(11),dp(9),dp(11));
+        futureTimeButton.setBackground(rounded(0xFFF0F6F8,11,0xFFDEE8EF,1));
+        futureTimeButton.setOnClickListener(v->{
+            TimePickerDialog dialog=new TimePickerDialog(this,(picker,hour,minute)->{
+                futureTime=LocalTime.of(hour,minute);
+                updateFutureFilters();
+                saveFutureFilters();
+            },futureTime.getHour(),futureTime.getMinute(),true);
+            dialog.show();
+        });
+        futureSearchButton=label("BUSCAR",12,NAVY,true);
+        futureSearchButton.setGravity(Gravity.CENTER);
+        futureSearchButton.setPadding(dp(6),dp(12),dp(6),dp(12));
+        futureSearchButton.setBackground(rounded(MINT,11,0,0));
+        futureSearchButton.setOnClickListener(v->searchFuture());
+        futureControls.addView(futureDateButton,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1.30f));
+        LinearLayout.LayoutParams timeLp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,0.85f);
+        timeLp.leftMargin=dp(6);
+        futureControls.addView(futureTimeButton,timeLp);
+        LinearLayout.LayoutParams queryLp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,0.85f);
+        queryLp.leftMargin=dp(6);
+        futureControls.addView(futureSearchButton,queryLp);
+        content.addView(futureControls);
+        updateFutureFilters();
+
         LinearLayout captionLine = new LinearLayout(this);
         captionLine.setGravity(Gravity.CENTER_VERTICAL);
         captionLine.addView(caption,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         driverToggle = label("PANEL ↗",11,0xFF167866,true);
         driverToggle.setPadding(dp(10),dp(8),dp(10),dp(8));
         driverToggle.setOnClickListener(v -> {
-            if (priorityVisible) enterManualBrowsing(true);
-            else if (boardHasResults) displayPriority(true);
+            if(manualBrowsing){
+                try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(FutureSchedule.SOURCE_URL)));}
+                catch(Exception ignored){}
+                return;
+            }
+            if(priorityVisible) enterManualBrowsing(true);
+            else if(boardHasResults)displayPriority(true);
             else enterManualBrowsing(true);
         });
         captionLine.addView(driverToggle);
@@ -377,6 +447,31 @@ public final class MainActivity extends Activity {
         });
         driverBoard.setVisibility(View.GONE);
         flightFrame.addView(driverBoard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        futureBoard=new DriverBoard(this);
+        futureBoard.setVisibility(View.GONE);
+        flightFrame.addView(futureBoard,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+
+        futureWeb=new WebView(this);
+        WebSettings futureSettings=futureWeb.getSettings();
+        futureSettings.setJavaScriptEnabled(true);
+        futureSettings.setDomStorageEnabled(true);
+        futureSettings.setAllowFileAccess(false);
+        futureSettings.setAllowContentAccess(false);
+        futureSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        futureWeb.setAlpha(0.01f);
+        futureWeb.setWebViewClient(new WebViewClient(){
+            @Override public void onPageFinished(WebView view,String url){
+                if(!manualBrowsing||mode!=0||!url.contains("flight.info"))return;
+                final int token=futureRequestId;
+                if(++futurePageLoads>3)return;
+                handler.postDelayed(()->applyFutureQuery(token),550);
+            }
+            @Override public void onReceivedError(WebView v,WebResourceRequest request,WebResourceError error){
+                if(request.isForMainFrame())futureFailure("No se pudo conectar con la programación.");
+            }
+        });
+        flightFrame.addView(futureWeb,new FrameLayout.LayoutParams(dp(1),dp(1)));
         content.addView(flightFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         surface.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -471,6 +566,9 @@ public final class MainActivity extends Activity {
         renderModeTabs();
         renderAuto();
         displayPriority(false);
+        futureRequestId++;
+        if(futureControls!=null)futureControls.setVisibility(View.GONE);
+        if(futureBoard!=null)futureBoard.setVisibility(View.GONE);
         panel.loadUrl(mode == 0 ? ARRIVALS : DEPARTURES);
         scheduleAutoRefresh();
     }
@@ -480,10 +578,7 @@ public final class MainActivity extends Activity {
         updateClock();
         errorLayer.setVisibility(View.GONE);
         if (manualBrowsing){
-            // Reload would discard the date/time selected inside the provider's WebView.
-            final int token=++readToken;
-            status.setText("Consulta fija · Para cambiar el resultado, usá la flecha azul del panel");
-            handler.postDelayed(() -> extractFlights(token,0),350);
+            searchFuture(); // Explicit request; never resets the user's date or time.
             return;
         }
         panel.reload();
@@ -510,10 +605,15 @@ public final class MainActivity extends Activity {
         }
         manualBrowsing=true;
         handler.removeCallbacks(refreshTask);
-        if(showSource)displayPriority(false);
+        displayPriority(false);
+        if(panel!=null)panel.setVisibility(View.INVISIBLE);
+        if(futureControls!=null)futureControls.setVisibility(View.VISIBLE);
+        if(driverToggle!=null)driverToggle.setText("VER FUENTE ↗");
         renderModeTabs();
         renderAuto();
-        if(status != null)status.setText("CONSULTA MANUAL · filtro protegido · actualización pausada");
+        if(!futureResultsVisible)searchFuture();
+        else if(futureBoard!=null)futureBoard.setVisibility(View.VISIBLE);
+        if(status != null)status.setText("CONSULTA MANUAL · fecha y hora propias · sin actualización automática");
     }
 
     private void returnToLive(){
@@ -524,6 +624,10 @@ public final class MainActivity extends Activity {
         }
         manualBrowsing=false;
         viewingOtherDate=false;
+        futureRequestId++;
+        futureResultsVisible=false;
+        if(futureControls!=null)futureControls.setVisibility(View.GONE);
+        if(futureBoard!=null)futureBoard.setVisibility(View.GONE);
         readToken++;
         flights.clear();
         boardHasResults=false;
@@ -540,9 +644,9 @@ public final class MainActivity extends Activity {
 
     private void displayPriority(boolean wantPriority) {
         priorityVisible = wantPriority && mode==0 && boardHasResults;
-        if (driverBoard != null) driverBoard.setVisibility(priorityVisible?View.VISIBLE:View.GONE);
-        if (panel != null) panel.setVisibility(priorityVisible?View.INVISIBLE:View.VISIBLE);
-        if (driverToggle != null) driverToggle.setText(priorityVisible?"VER FILTRO ↗":boardHasResults?"VER RESUMEN ↗":"PANEL ORIGINAL ↗");
+        if (driverBoard != null) driverBoard.setVisibility(!manualBrowsing&&priorityVisible?View.VISIBLE:View.GONE);
+        if (panel != null) panel.setVisibility(manualBrowsing||priorityVisible?View.INVISIBLE:View.VISIBLE);
+        if (driverToggle != null) driverToggle.setText(manualBrowsing?"VER FUENTE ↗":priorityVisible?"VER FILTRO ↗":boardHasResults?"VER RESUMEN ↗":"PANEL ORIGINAL ↗");
     }
 
     private void extractFlights(int token, int attempt) {
@@ -603,6 +707,76 @@ public final class MainActivity extends Activity {
                 // Preserve already scheduled alerts when browsing an unavailable future date.
             }
         });
+    }
+
+    private void updateFutureFilters(){
+        if(futureDateButton!=null)futureDateButton.setText("◷ "+futureDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        if(futureTimeButton!=null)futureTimeButton.setText("≥ "+futureTime.toString());
+    }
+
+    private void saveFutureFilters(){
+        getPreferences(MODE_PRIVATE).edit().putString("futureDate",futureDate.toString())
+            .putInt("futureHour",futureTime.getHour()).apply();
+    }
+
+    private void searchFuture(){
+        if(!manualBrowsing||mode!=0||futureWeb==null)return;
+        futureResultsVisible=false;
+        futureRequestId++;
+        futurePageLoads=0;
+        saveFutureFilters();
+        if(futureBoard!=null)futureBoard.setVisibility(View.GONE);
+        if(sourceWarning!=null){
+            sourceWarning.setText("Consultando programación del "+futureDate+
+                " desde "+futureTime+" · verificando la fecha…");
+            sourceWarning.setVisibility(View.VISIBLE);
+        }
+        status.setText("Programación prevista · no es seguimiento en vivo");
+        futureWeb.loadUrl(FutureSchedule.SOURCE_URL);
+    }
+
+    private void applyFutureQuery(int token){
+        if(token!=futureRequestId||!manualBrowsing||futureWeb==null)return;
+        futureWeb.evaluateJavascript(FutureSchedule.applyDateJs(futureDate),response->{
+            if(token!=futureRequestId)return;
+            handler.postDelayed(()->readFutureQuery(token,0),1600);
+        });
+    }
+
+    private void readFutureQuery(int token,int attempt){
+        if(token!=futureRequestId||!manualBrowsing||futureWeb==null)return;
+        futureWeb.evaluateJavascript(FutureSchedule.EXTRACT_JS,json->{
+            if(token!=futureRequestId||!manualBrowsing)return;
+            FutureSchedule.Result result=FutureSchedule.parse(json,futureDate,futureTime);
+            if(result.verified && !result.flights.isEmpty()){
+                futureResultsVisible=true;
+                futureBoard.render(result.flights,futureDate,false);
+                futureBoard.setVisibility(View.VISIBLE);
+                if(sourceWarning!=null)sourceWarning.setVisibility(View.GONE);
+                status.setText(result.flights.size()+" vuelos programados desde "+futureTime+
+                    " · fuente complementaria · sin confirmación de aterrizaje");
+            }else if(attempt<2 && futurePageLoads<=3){
+                handler.postDelayed(()->readFutureQuery(token,attempt+1),1200);
+            }else{
+                String message=result.verified && result.sourceRows>0 ?
+                    "La fuente no muestra más vuelos después de "+futureTime+
+                    ". Comprobá la programación original." :
+                    "No se pudo verificar la programación para "+futureDate+
+                    ". Consultá la fuente directamente.";
+                futureFailure(message);
+            }
+        });
+    }
+
+    private void futureFailure(String reason){
+        if(!manualBrowsing)return;
+        futureResultsVisible=false;
+        if(futureBoard!=null)futureBoard.setVisibility(View.GONE);
+        if(sourceWarning!=null){
+            sourceWarning.setText(reason+"  ·  TOCÁ PARA COMPROBAR EN CARRASCO ↗");
+            sourceWarning.setVisibility(View.VISIBLE);
+        }
+        status.setText("Fecha y hora conservadas · sin datos verificables");
     }
 
     private void renderAlertsToggle(){
@@ -690,13 +864,15 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (mode == 1) selectMode(0);
+        if (manualBrowsing) returnToLive();
+        else if(mode == 1) selectMode(0);
         else super.onBackPressed();
     }
 
     @Override protected void onDestroy() {
         handler.removeCallbacks(refreshTask);
         if (panel != null) panel.destroy();
+        if (futureWeb != null) futureWeb.destroy();
         super.onDestroy();
     }
 }
