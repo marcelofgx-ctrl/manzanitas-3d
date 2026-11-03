@@ -13,3 +13,14 @@ No se modifican Quick Trip, Supabase, Vercel ni la rama main de ningún proyecto
 Firma debug, puede ser necesario desinstalar v1.3.1 antes de instalar v1.4.1.
 
 - Si Avionio responde sin registros, ofrece abrir el panel oficial de Carrasco para verificar una fecha futura.
+
+## v1.5.0 — Dos modos sin interferencias
+- **Hoy · En vivo:** actualización automática de Avionio cada tres minutos si la aplicación sigue en primer plano; vista nativa de arribos próximos y desplazamiento al próximo vuelo solamente si la lista no fue manipulada durante 45 segundos.
+- **Consultar fecha:** modo manual visible. Detiene inmediatamente las recargas de WebView para no borrar fecha, hora ni posición seleccionadas en el widget de Avionio. Los toques en el panel también activan este bloqueo.
+- El botón refrescar en modo manual **relee los datos ya visibles**; no recarga el widget porque eso resetearía el formulario. Para buscar otra fecha/hora se usa la flecha azul dentro de la fuente.
+- Botón **Hoy · En vivo** vuelve explícitamente a hoy, con recarga controlada.
+- Si Avionio dice "Sin vuelos" o los datos son ilegibles, la app no certifica que Carrasco esté sin vuelos; ofrece link al panel oficial para comprobar.
+- La precisión/alcance de Avionio sobre fechas futuras es una limitación de esa fuente, no una garantía de la app.
+- En primer plano y minimizado la consulta manual conserva estado mientras Android mantenga el proceso; reinicios o destrucción del proceso podrían reiniciar el widget.
+- Sonidos y vibración permanecen como avisos locales basados en últimas llegadas verificadas, no push en tiempo real.
+- Sin cambios a Quick Trip, main, Supabase ni producción.
