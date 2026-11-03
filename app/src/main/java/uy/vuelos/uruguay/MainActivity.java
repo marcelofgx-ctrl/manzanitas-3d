@@ -6,6 +6,9 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -58,7 +61,7 @@ public final class MainActivity extends Activity {
     private WebView panel;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshTask = () -> {
-        if (foreground && autoRefresh && panel != null) {
+        if (foreground && autoRefresh && !viewingOtherDate && panel != null) {
             panel.reload();
             scheduleAutoRefresh();
         }
@@ -73,6 +76,9 @@ public final class MainActivity extends Activity {
     private List<FlightData.Flight> flights = new ArrayList<>();
     private int readToken = 0;
     private boolean priorityVisible = false;
+    private boolean boardHasResults = false;
+    private boolean viewingOtherDate = false;
+    private long sourceTapAt = 0L;
 
     private int dp(float points) {
         return Math.round(points * getResources().getDisplayMetrics().density);
@@ -262,6 +268,16 @@ public final class MainActivity extends Activity {
                 progress.setVisibility(value >= 100 ? View.GONE : View.VISIBLE);
             }
         });
+        panel.setOnTouchListener((view, event) -> {
+            if (mode == 0 && !priorityVisible && event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                sourceTapAt = SystemClock.elapsedRealtime();
+                final int token = ++readToken;
+                handler.postDelayed(() -> extractFlights(token,0),1250L);
+                handler.postDelayed(() -> extractFlights(token,1),3200L);
+                handler.postDelayed(() -> extractFlights(token,2),5900L);
+            }
+            return false;
+        });
         panel.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
@@ -291,6 +307,7 @@ public final class MainActivity extends Activity {
                     if(mode == 0) {
                         final int token=++readToken;
                         handler.postDelayed(() -> extractFlights(token,0),950);
+                        handler.postDelayed(() -> extractFlights(token,1),2900);
                     }
                 }
             }
@@ -391,6 +408,9 @@ public final class MainActivity extends Activity {
         updateClock();
         readToken++;
         flights.clear();
+        boardHasResults = false;
+        viewingOtherDate = false;
+        renderAuto();
         displayPriority(false);
         panel.loadUrl(mode == 0 ? ARRIVALS : DEPARTURES);
         scheduleAutoRefresh();
@@ -406,7 +426,7 @@ public final class MainActivity extends Activity {
 
 
     private void displayPriority(boolean wantPriority) {
-        priorityVisible = wantPriority && mode==0 && !flights.isEmpty();
+        priorityVisible = wantPriority && mode==0 && boardHasResults;
         if (driverBoard != null) driverBoard.setVisibility(priorityVisible?View.VISIBLE:View.GONE);
         if (panel != null) panel.setVisibility(priorityVisible?View.INVISIBLE:View.VISIBLE);
         if (driverToggle != null) driverToggle.setText(priorityVisible?"VER PANEL ↗":"PRÓXIMOS ↗");
@@ -415,23 +435,40 @@ public final class MainActivity extends Activity {
     private void extractFlights(int token, int attempt) {
         if (token != readToken || mode!=0 || panel==null || errorActive) return;
         panel.evaluateJavascript(FlightData.EXTRACT_JS, payload -> {
-            if (token!=readToken || mode!=0) return;
-            List<FlightData.Flight> parsed = FlightData.parseJsResult(payload,System.currentTimeMillis());
-            if(parsed.size()>0){
-                flights=parsed;
-                driverBoard.render(flights);
+            if (token!=readToken || mode!=0 || errorActive) return;
+            long now=System.currentTimeMillis();
+            FlightData.BoardSnapshot board=FlightData.parseBoardJs(payload,now);
+            LocalDate today=Instant.ofEpochMilli(now).atZone(FlightData.UY).toLocalDate();
+            if(board.parsed) {
+                flights=board.flights;
+                boardHasResults=true;
+                viewingOtherDate=!today.equals(board.selectedDate);
+                driverBoard.render(flights,board.selectedDate,board.sourceEmpty);
+                // The source's date may change when a user selects tomorrow. Keep it visible.
+                if(viewingOtherDate){
+                    subheading.setText("Consulta: "+DateTimeFormatter.ofPattern("d MMM yyyy",new Locale("es","UY")).format(board.selectedDate));
+                }else subheading.setText("Horarios y estado de los vuelos");
                 displayPriority(true);
-                if(FlightAlerts.enabled(this)){
-                    int scheduled=FlightAlerts.schedule(this,flights,System.currentTimeMillis());
-                    status.setText("Avionio · "+scheduled+" aviso(s) según último horario");
+                renderAuto();
+                scheduleAutoRefresh();
+                if(board.sourceEmpty){
+                    status.setText("Avionio no muestra registros · no equivale a aeropuerto sin vuelos");
+                    // Do not cancel earlier alerts when the user browses a future date.
+                }else if(viewingOtherDate){
+                    status.setText("Avionio · "+flights.size()+" arribos de la fecha seleccionada · sin alertas futuras");
+                }else if(FlightAlerts.enabled(this)){
+                    int scheduled=FlightAlerts.schedule(this,flights,now);
+                    status.setText("Avionio · "+flights.size()+" arribos · "+scheduled+" avisos programados");
                 }else status.setText("Avionio · "+flights.size()+" arribos identificados");
-            }else if(attempt<2){
+            } else if(attempt<2){
                 handler.postDelayed(() -> extractFlights(token,attempt+1),1600);
-            }else{
+            } else {
                 flights.clear();
+                boardHasResults=false;
+                viewingOtherDate=false;
                 displayPriority(false);
-                FlightAlerts.cancelAll(this);
-                status.setText("Panel original · sin datos confiables para reordenar");
+                status.setText("No se pudieron recuperar vuelos · el panel no confirma ausencia de arribos");
+                // Preserve already scheduled alerts when browsing an unavailable future date.
             }
         });
     }
@@ -478,7 +515,7 @@ public final class MainActivity extends Activity {
 
     private void renderAuto() {
         if (autoSwitch == null) return;
-        autoSwitch.setText(autoRefresh ? "●  AUTO 3 MIN" : "○  AUTO OFF");
+        autoSwitch.setText(viewingOtherDate && autoRefresh ? "● AUTO PAUSA" : autoRefresh ? "● AUTO 3 MIN" : "○ AUTO OFF");
         autoSwitch.setTextColor(autoRefresh ? 0xFF137961 : SECONDARY);
         autoSwitch.setBackground(rounded(autoRefresh ? 0xFFE0F9EF : 0xFFE8EDF1, 16, 0, 0));
         autoSwitch.setContentDescription(autoRefresh ? "Desactivar actualización cada 3 minutos" : "Activar actualización cada 3 minutos");
@@ -493,14 +530,14 @@ public final class MainActivity extends Activity {
 
     private void scheduleAutoRefresh() {
         handler.removeCallbacks(refreshTask);
-        if (foreground && autoRefresh) handler.postDelayed(refreshTask, REFRESH_MS);
+        if (foreground && autoRefresh && !viewingOtherDate) handler.postDelayed(refreshTask, REFRESH_MS);
     }
 
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
         updateClock();
-        if (panel != null && autoRefresh && lastLoadedElapsed > 0L
+        if (panel != null && autoRefresh && !viewingOtherDate && lastLoadedElapsed > 0L
             && SystemClock.elapsedRealtime() - lastLoadedElapsed >= REFRESH_MS) {
             panel.reload();
         }
