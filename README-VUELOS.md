@@ -79,3 +79,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - La elección ON/OFF persiste en SharedPreferences; no afecta notificaciones, vuelos, ubicación ni Quick Trip.
 - Mayor consumo de batería y posible retención de imagen si se deja la pantalla fija durante períodos prolongados; recomendamos apagar el interruptor cuando no sea necesario.
 - Firma QA y validación física final en Samsung pendiente.
+
+## v1.11.0 — Velocímetro y límite de calle (QA)
+- Panel discreto: velocidad GPS en km/h y límite registrado en OpenStreetMap (etiqueta maxspeed) para el tramo identificado.
+- El GPS está **apagado por defecto**. Su activación requiere consentimiento y permiso de ubicación precisa solo mientras la app esté visible; al minimizar o bloquear deja de solicitar ubicaciones.
+- La consulta remota de límites envía la posición al servicio público Overpass de OpenStreetMap, con máximo una solicitud cada 90 s. Se conserva la geometría temporalmente en memoria para evitar consultas reiteradas.
+- Sin límite registrado, sin cobertura de GPS o con calles paralelas ambiguas se muestra un guion «—», jamás un límite supuesto.
+- Al pasar el límite en más de 7 km/h se resalta la velocidad, y el usuario puede habilitar una vibración breve tras cinco segundos sostenidos. Aviso vibratorio OFF por defecto.
+- No se almacena recorrido, no hay rastreo en segundo plano y no se envía ubicación a Quick Trip. Atribución discreta © OpenStreetMap contributors.
+- La señalización vial real prevalece sobre el valor de mapa y el velocímetro GPS no sustituye el del vehículo.
+- Se conserva la función pantalla encendida de v1.10, los vuelos y sus avisos sin cambios funcionales.
+- QA en rama aislada. Requiere comprobar cobertura real de maxspeed en Montevideo/Canelones y validar físicamente en Samsung.
