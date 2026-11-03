@@ -85,7 +85,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         limitTile.addView(limitCaption);
         LinearLayout limitLine=new LinearLayout(a);
         limitLine.setGravity(Gravity.BOTTOM);
-        limitValue=text("—",32,NAVY,true);
+        limitValue=text("N/D",29,NAVY,true);
         limitValue.setIncludeFontPadding(false);
         limitLine.addView(limitValue);
         TextView limitUnit=text("km/h",11,MUTED,false);
@@ -93,6 +93,13 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         limitLine.addView(limitUnit);
         limitTile.addView(limitLine);
         limitTile.setBackground(pill(Color.WHITE,0xFFE1EAF0));
+        limitTile.setOnClickListener(v->new AlertDialog.Builder(activity)
+            .setTitle("Límite de velocidad del tramo")
+            .setMessage((currentLimit>0?currentLimit+" km/h · valor registrado en OpenStreetMap":
+                "Dato no disponible")+"\n\n"+roadStatus+
+                "\n\nLa aplicación solo muestra un número si puede identificar el tramo y un límite registrado para esa calle. No reemplaza las señales reales.")
+            .setPositiveButton("Entendido",(d,w)->{})
+            .show());
 
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
             0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
@@ -234,7 +241,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             }
             lookup.resume();
             // Only one foreground GPS subscription; no background updates or map navigation.
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1500L,3f,
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1500L,0f,
                 this,activity.getMainLooper());
             tracking=true;
             stateValue.setText("Esperando señal GPS…");
@@ -256,7 +263,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         hasUsableSpeed=false;
         overSince=0;
         speedValue.setText("—");
-        limitValue.setText("—");
+        limitValue.setText("N/D");
         roadStatus=enabled?"GPS en pausa":"GPS apagado · tocá GPS para activar";
         renderSpeedColors();
     }
@@ -279,7 +286,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         lookup.onLocation(location,(match,state)->{
             if(!resumed||!enabled||!tracking)return;
             currentLimit=match.confident?match.limitKmh:0;
-            limitValue.setText(match.confident?String.valueOf(match.limitKmh):"—");
+            limitValue.setText(match.confident?String.valueOf(match.limitKmh):"N/D");
             roadStatus=match.confident
                 ?(match.name.isEmpty()?"Límite cartográfico · señal prevalece":
                     match.name+" · límite cartográfico")
@@ -324,7 +331,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             stateValue.setTextColor(MUTED);
         }
         String limitDescription=currentLimit>0 ? currentLimit+" kilómetros por hora registrados":
-            "límite no disponible";
+            "límite no disponible. Tocá el panel para saber por qué";
         speedTile.setContentDescription("Velocidad actual GPS: "+
             (currentKmh<0?"no disponible":currentKmh+" kilómetros por hora")+
             ". "+(visual==SpeedColorPolicy.RED?"Alerta roja de exceso. ":
@@ -358,7 +365,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         currentLimit=0;
         hasUsableSpeed=false;
         roadStatus="GPS desactivado en Android";
-        speedValue.setText("—");limitValue.setText("—");
+        speedValue.setText("—");limitValue.setText("N/D");
         overSince=0L;
         renderSpeedColors();
     }
