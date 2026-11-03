@@ -3,6 +3,7 @@ package uy.vuelos.uruguay;
 import android.location.Location;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -16,8 +17,9 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Opportunistic, low-frequency OpenStreetMap lookup. Visible Activity only.
- * One external query at most every 90s and only when needed; never a route tracker.
+/** Low-frequency OSM road lookup, initiated only with user's foreground GPS consent.
+ * Queries all drivable streets, not only streets with maxspeed, so the true nearest
+ * untagged street cannot accidentally inherit the limit of another road.
  */
 public final class SpeedLimitLookup {
     public interface Callback {
@@ -26,9 +28,9 @@ public final class SpeedLimitLookup {
     private static final String ENDPOINT="https://overpass-api.de/api/interpreter";
     private static final long MIN_QUERY_MS=90000L;
     private static final long MAX_CACHE_MS=300000L;
-    private static final float QUERY_RADIUS_METERS=900f;
-    private static final float CACHE_RADIUS_METERS=680f;
-    private final Handler handler=new Handler(Looper.getMainLooper());
+    private static final float CACHE_RADIUS_METERS=480f;
+    private static final float REQUERY_DISTANCE_METERS=430f;
+    private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private List<RoadSpeedMatcher.Road> roads=Collections.emptyList();
     private double queryLat=Double.NaN,queryLon=Double.NaN;
@@ -36,102 +38,134 @@ public final class SpeedLimitLookup {
     private volatile boolean alive=false;
     private boolean pending=false;
     private int generation=0;
+    private Location latestLocation;
+    private String failureMessage="";
 
     public void resume(){alive=true;}
-    public void pause(){alive=false;generation++;pending=false;} // no stale query can update a hidden app
+    public void pause(){
+        alive=false;generation++;pending=false;latestLocation=null;
+    }
     public void close(){pause();worker.shutdownNow();}
 
-    public void onLocation(Location pos,Callback onResult){
-        if(!alive || pos==null)return;
-        float acc=pos.hasAccuracy()?pos.getAccuracy():Float.POSITIVE_INFINITY;
-        if(acc>25f){
-            onResult.onLimit(RoadSpeedMatcher.Match.unavailable(),"GPS impreciso");
+    private static String explain(RoadSpeedMatcher.Match match){
+        if(match.confident)return "Límite cartográfico";
+        switch(match.reason){
+            case RoadSpeedMatcher.NO_LIMIT:
+                return (match.name==null||match.name.isEmpty()?
+                    "Calle sin límite cargado":"Sin límite cargado · "+match.name);
+            case RoadSpeedMatcher.AMBIGUOUS:
+                return "Calles cercanas: límite ambiguo";
+            case RoadSpeedMatcher.GPS_INACCURATE:
+                return "GPS poco preciso · acercate a la calle";
+            case RoadSpeedMatcher.NO_ROAD:
+            default:
+                return "No se pudo identificar la calle";
+        }
+    }
+
+    public void onLocation(Location location,Callback callback){
+        if(!alive || location==null)return;
+        latestLocation=new Location(location);
+        float accuracy=location.hasAccuracy()?location.getAccuracy():Float.POSITIVE_INFINITY;
+        if(accuracy>25f){
+            callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
+                Double.isFinite(accuracy)?
+                    "GPS impreciso (±"+Math.round(accuracy)+" m)":"Esperando GPS preciso");
             return;
         }
-        if(Double.isFinite(queryLat) && Double.isFinite(queryLon)){
-            float[] d=new float[1];
-            Location.distanceBetween(pos.getLatitude(),pos.getLongitude(),queryLat,queryLon,d);
-            if(d[0]<=CACHE_RADIUS_METERS){
-                RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(roads,
-                    pos.getLatitude(),pos.getLongitude(),acc);
-                onResult.onLimit(match,match.confident?"Límite cartográfico":"Sin límite registrado");
-            }else onResult.onLimit(RoadSpeedMatcher.Match.unavailable(),"Consultando otra calle");
-        }else onResult.onLimit(RoadSpeedMatcher.Match.unavailable(),"Consultando mapa");
-
-        long now=android.os.SystemClock.elapsedRealtime();
-        boolean hasCache=Double.isFinite(queryLat);
-        boolean expired=now-lastQueryElapsed>=MAX_CACHE_MS;
-        float away=Float.POSITIVE_INFINITY;
-        if(hasCache){
-            float[] d=new float[1];
-            Location.distanceBetween(pos.getLatitude(),pos.getLongitude(),queryLat,queryLon,d);
-            away=d[0];
+        boolean cached=Double.isFinite(queryLat)&&Double.isFinite(queryLon);
+        float distance=Float.POSITIVE_INFINITY;
+        if(cached){
+            float[] result=new float[1];
+            Location.distanceBetween(location.getLatitude(),location.getLongitude(),
+                queryLat,queryLon,result);
+            distance=result[0];
         }
-        boolean need= !hasCache || expired || away>650f;
-        if(pending || !need || (lastQueryElapsed>0 && now-lastQueryElapsed<MIN_QUERY_MS))return;
-        pending=true;
-        lastQueryElapsed=now;
-        final int requestGeneration=++generation;
-        final double lat=pos.getLatitude(),lon=pos.getLongitude();
+        if(cached&&distance<=CACHE_RADIUS_METERS){
+            RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(roads,
+                location.getLatitude(),location.getLongitude(),accuracy);
+            callback.onLimit(match,explain(match));
+        } else {
+            callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
+                pending?"Buscando límite de calle…":
+                failureMessage.isEmpty()?"Identificando la calle…":failureMessage);
+        }
+
+        long now=SystemClock.elapsedRealtime();
+        boolean elapsed=lastQueryElapsed==0||now-lastQueryElapsed>=MIN_QUERY_MS;
+        boolean expired=lastQueryElapsed>0 && now-lastQueryElapsed>=MAX_CACHE_MS;
+        boolean need=!cached || expired || distance>REQUERY_DISTANCE_METERS;
+        if(pending||!need||!elapsed)return;
+
+        final int request=++generation;
+        pending=true;lastQueryElapsed=now;
+        final double lat=location.getLatitude(),lon=location.getLongitude();
         worker.execute(()->{
             List<RoadSpeedMatcher.Road> found=null;
-            String state="Límite no disponible";
-            try {
-                found=download(lat,lon);
-                state=found.isEmpty()?"Sin límite registrado":"Datos viales recibidos";
-            } catch(Exception e) {
-                state="Fuente cartográfica no disponible";
-            }
-            final List<RoadSpeedMatcher.Road> result=found;
-            final String message=state;
-            handler.post(()->{
-                if(!alive||requestGeneration!=generation)return;
+            String error="";
+            try{found=download(lat,lon);}
+            catch(Exception e){error="Fuente cartográfica sin respuesta · reintentando";}
+            final List<RoadSpeedMatcher.Road> received=found;
+            final String failure=error;
+            main.post(()->{
+                if(!alive||request!=generation)return;
                 pending=false;
-                if(result==null){
-                    // Fail closed, do not show a stale limit after a failed move to new roads.
+                failureMessage=failure;
+                if(received==null){
+                    // A failed query must not be cached as "no roads" for five minutes.
+                    queryLat=Double.NaN;queryLon=Double.NaN;
                     roads=Collections.emptyList();
-                    queryLat=lat;queryLon=lon;
-                }else{
-                    roads=result;
-                    queryLat=lat;queryLon=lon;
+                    callback.onLimit(RoadSpeedMatcher.Match.unavailable(),failure);
+                    return;
                 }
-                if(result!=null && pos.hasAccuracy()){
-                    RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(result,
-                        pos.getLatitude(),pos.getLongitude(),pos.getAccuracy());
-                    onResult.onLimit(match,match.confident?"Límite cartográfico":message);
-                } else onResult.onLimit(RoadSpeedMatcher.Match.unavailable(),message);
+                roads=received;
+                queryLat=lat;queryLon=lon;
+                Location last=latestLocation;
+                if(last==null||!last.hasAccuracy())return;
+                float[] away=new float[1];
+                Location.distanceBetween(last.getLatitude(),last.getLongitude(),
+                    lat,lon,away);
+                if(away[0]>CACHE_RADIUS_METERS){
+                    callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
+                        "Cambiaste de zona · buscando otra calle");
+                    return;
+                }
+                RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(received,
+                    last.getLatitude(),last.getLongitude(),last.getAccuracy());
+                callback.onLimit(match,explain(match));
             });
         });
     }
 
-    private static List<RoadSpeedMatcher.Road> download(double lat,double lon) throws Exception {
-        // This query is deliberately bounded, rate-limited and used only with consent.
+    private static List<RoadSpeedMatcher.Road> download(double lat,double lon)throws Exception{
+        // Compact query: include drivable roads with and without maxspeed tags.
+        // Limit requests, cache locally in memory and never record travel history.
         String q=String.format(Locale.US,
-            "[out:json][timeout:12];way(around:900,%.6f,%.6f)[\"highway\"][\"maxspeed\"];out tags geom;",
+            "[out:json][timeout:16];way(around:650,%.6f,%.6f)"+
+            "[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|residential|"+
+            "unclassified|living_street|service|road)(|_link)$\"];out tags geom;",
             lat,lon);
         byte[] body=("data="+java.net.URLEncoder.encode(q,"UTF-8"))
             .getBytes(StandardCharsets.UTF_8);
-        HttpURLConnection conn=(HttpURLConnection)new URL(ENDPOINT).openConnection();
+        HttpURLConnection c=(HttpURLConnection)new URL(ENDPOINT).openConnection();
         try {
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("User-Agent","VuelosUruguaySpeedLimit-QA/1.11 (OSM-based opt-in)");
-            conn.setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
-            conn.setConnectTimeout(9000);
-            conn.setReadTimeout(14000);
-            conn.setDoOutput(true);
-            conn.setUseCaches(false);
-            try(OutputStream out=conn.getOutputStream()){out.write(body);}
-            if(conn.getResponseCode()!=200)throw new IllegalStateException("Servicio cartográfico temporalmente no disponible");
-            try(InputStream in=conn.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
-                byte[] buffer=new byte[8192];
-                int n,total=0;
-                while((n=in.read(buffer))!=-1){
-                    total+=n;
-                    if(total>2300000)throw new IllegalStateException("Respuesta excesiva");
-                    out.write(buffer,0,n);
+            c.setRequestMethod("POST");
+            c.setRequestProperty("User-Agent","VuelosUruguay-QA/1.14 (foreground opt-in road limits)");
+            c.setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8");
+            c.setConnectTimeout(10000);
+            c.setReadTimeout(18000);
+            c.setDoOutput(true);c.setUseCaches(false);
+            try(OutputStream o=c.getOutputStream()){o.write(body);}
+            if(c.getResponseCode()!=200)throw new IllegalStateException("Overpass unavailable");
+            try(InputStream in=c.getInputStream();ByteArrayOutputStream buffer=new ByteArrayOutputStream()){
+                byte[] chunk=new byte[8192];int length,total=0;
+                while((length=in.read(chunk))!=-1){
+                    total+=length;
+                    if(total>5000000)throw new IllegalStateException("Map response too large");
+                    buffer.write(chunk,0,length);
                 }
-                return RoadSpeedMatcher.parseOverpass(out.toString("UTF-8"));
+                return RoadSpeedMatcher.parseOverpass(buffer.toString("UTF-8"));
             }
-        }finally{conn.disconnect();}
+        }finally{c.disconnect();}
     }
 }
