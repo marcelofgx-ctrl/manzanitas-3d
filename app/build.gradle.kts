@@ -5,9 +5,9 @@ android {
  defaultConfig {
    applicationId = "uy.vuelos.uruguay"
    minSdk = 26
-   targetSdk = 32
-   versionCode = 3
-   versionName = "1.2"
+   targetSdk = 34
+   versionCode = 4
+   versionName = "1.3"
  }
  compileOptions {
    sourceCompatibility = JavaVersion.VERSION_17
