@@ -1,17 +1,13 @@
-# Manzanitas 3D — El bosque encantado
+# Vuelos Uruguay Premium v1.2
+Aplicación Android autónoma y sin relación con Quick Trip. Fuente de datos: widget embebible Avionio (Carrasco MVD) con crédito visible.
 
-Primer prototipo gratuito e independiente, con representación 3D mediante WebGL nativo.
+## Interfaz
+Cabecera y controles premium, icono de avión y ruta verde menta, pestañas de llegadas y salidas, hora de Uruguay, estado de consulta, refresco manual y automático cada 3 minutos mientras la APK está abierta (toggable: AUTO 3 MIN / AUTO OFF).
 
-Jugar en navegador: https://marcelofgx-ctrl.github.io/manzanitas-3d/
+## Límites
+Esto no es una API de tiempo real ni una base de datos propia. Cada recarga vuelve a pedir el widget Avionio, cuya exactitud y velocidad de actualización son controladas por ese proveedor. Los vuelos de código compartido no son aviones adicionales.
+La consulta requiere conexión a Internet. La APK no incorpora anuncios propios ni recopila datos de ubicación, ni incluye accesos a otras plataformas publicitarias.
 
-## Objetivo
-Recoger las manzanas que caen de los árboles, transportar hasta tres por viaje y entregarlas en el granero. Evitar al ogro y usar el poder de espantar. Completar el objetivo antes de agotar tiempo y vidas.
-
-## Web
-El juego es un único archivo `index.html` autónomo (excepto tipografías opcionales). Se publica mediante `.github/workflows/publicar-web.yml` en GitHub Pages. Para habilitar Pages por primera vez, entrar a Settings → Pages → Build and deployment → Source: GitHub Actions.
-
-## APK
-La acción `Compilar Manzanitas 3D APK` genera una APK debug instalable desde el artefacto `Manzanitas-3D-APK` de GitHub Actions. Incluye el juego como página WebView local, sin conexiones a Floot, servidores ni anuncios. No es una compilación de Google Play firmada para producción.
-
-## Pendiente
-Pruebas reales de WebGL y controles en Android, ajustes de dificultad, animaciones, y más adelante plan de monetización sujeto a cumplimiento normativo.
+## Instalación y aislamiento
+ID Android: uy.vuelos.uruguay; versión 1.2, versión code 3. Al compilar con firma debug en CI, puede requerirse desinstalar la v1.1 antes de instalar v1.2.
+Se compila en una rama QA aislada. No modifica ninguno de los repositorios, servidores, proyectos o aplicaciones Quick Trip, y no modifica la rama main.
