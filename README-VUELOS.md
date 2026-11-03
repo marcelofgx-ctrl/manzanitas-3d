@@ -99,3 +99,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - No borra ni modifica configuraciones ni datos operativos. GPS, seguimiento, alertas y modo consulta continúan con la misma funcionalidad.
 - Se agregan pruebas unitarias de dirección del gesto y prevención de cierres accidentales.
 - Solo rama QA de Vuelos Uruguay; sin cambios en `main`, Quick Trip, Mapa QT, Supabase ni producción.
+
+## v1.13.0 — Velocímetro premium adaptable
+- Rediseño del bloque de velocidad bajo el horario de Montevideo para un Samsung: dos tarjetas horizontales de tamaño flexible y controles estrechos GPS / VIB, con cifras grandes de **34 sp** y **32 sp**, sin ampliar la cabecera ni quitar espacio innecesario a los vuelos.
+- La primera tarjeta muestra velocidad GPS y la segunda límite registrado para el tramo actual; cuando no hay cobertura GPS o datos OSM fiables, los campos muestran «—» sin inferencias.
+- **Normal**: hasta el límite registrado, azul oscuro; **ámbar**: 1–6 km/h por encima; **rojo**: desde 7 km/h por encima. Fondo y texto cambian inmediatamente al actualizar velocidad o límite.
+- La vibración continúa siendo voluntaria, desactivada inicialmente: se emite una vibración breve si el exceso rojo se mantiene 5 segundos, con espera mínima de 45 segundos entre avisos.
+- Los umbrales de color son ayudas visuales definidas para el conductor y NO representan tolerancias legales; la señalización vial prevalece.
+- Se conserva el permiso explícito de ubicación y la activación del GPS por consentimiento. Si ya se habilitó, se reactiva al volver al primer plano. No hay seguimiento con la app minimizada.
+- Se mantiene atribución visible a OpenStreetMap. Se conserva la solapa inferior 1.12 y los motores de vuelos, ETA, GPS, mapas, alertas de vuelo, y pantalla encendida.
+- Se agregan pruebas unitarias para límites normales, ámbar, rojo, cambios de tramo y límite desconocido.
+- QA aislada en manzanitas-3d, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
