@@ -211,7 +211,10 @@ public final class FlightData {
         return out;
     }
     public static String countdown(long arrival,long now){
-        long minutes=Math.max(0,(arrival-now+MINUTE-1)/MINUTE);
+        long difference=arrival-now;
+        if(difference < 0L)return "SIN CONFIRMAR";
+        long minutes=(difference+MINUTE-1)/MINUTE;
+        if(minutes == 0L)return "AHORA";
         if(minutes<60)return "EN "+minutes+" MIN";
         return "EN "+minutes/60+" H "+minutes%60+" MIN";
     }
