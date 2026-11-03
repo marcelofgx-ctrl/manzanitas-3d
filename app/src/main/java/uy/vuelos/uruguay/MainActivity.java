@@ -2,6 +2,9 @@ package uy.vuelos.uruguay;
 
 import android.app.Activity;
 import android.view.WindowManager;
+import android.view.MotionEvent;
+import android.transition.AutoTransition;
+import android.transition.TransitionManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
@@ -88,6 +91,9 @@ public final class MainActivity extends Activity {
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
     private TextView driverToggle, alertsToggle, awakeToggle;
+    private TextView footerHandle;
+    private LinearLayout footerDetails, mainColumn;
+    private boolean footerExpanded = false;
     private RoadSpeedPanel roadSpeedPanel;
     private boolean keepScreenAwake = true;
     private LinearLayout foregroundAlertCard;
@@ -174,6 +180,7 @@ public final class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setBackgroundColor(BACKGROUND);
         root.setOrientation(LinearLayout.VERTICAL);
+        mainColumn = root;
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -505,9 +512,9 @@ public final class MainActivity extends Activity {
         surface.addView(errorLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(surface, surfaceParams);
 
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.VERTICAL);
-        footer.setPadding(dp(13), dp(3), dp(13), dp(7));
+        footerDetails = new LinearLayout(this);
+        footerDetails.setOrientation(LinearLayout.VERTICAL);
+        footerDetails.setPadding(dp(13), dp(3), dp(13), dp(7));
 
         LinearLayout firstFooter = new LinearLayout(this);
         firstFooter.setGravity(Gravity.CENTER_VERTICAL);
@@ -521,7 +528,7 @@ public final class MainActivity extends Activity {
             else toggleAuto();
         });
         firstFooter.addView(autoSwitch);
-        footer.addView(firstFooter);
+        footerDetails.addView(firstFooter);
         LinearLayout noticeBar = new LinearLayout(this);
         noticeBar.setGravity(Gravity.CENTER_VERTICAL);
         noticeBar.setPadding(0,dp(3),0,dp(3));
@@ -532,7 +539,7 @@ public final class MainActivity extends Activity {
         alertsToggle.setPadding(dp(9),dp(6),dp(9),dp(6));
         alertsToggle.setOnClickListener(v -> toggleFlightAlerts());
         noticeBar.addView(alertsToggle);
-        footer.addView(noticeBar);
+        footerDetails.addView(noticeBar);
 
         LinearLayout awakeRow=new LinearLayout(this);
         awakeRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -545,7 +552,7 @@ public final class MainActivity extends Activity {
         awakeToggle.setPadding(dp(9),dp(6),dp(9),dp(6));
         awakeToggle.setOnClickListener(v -> toggleKeepScreenAwake());
         awakeRow.addView(awakeToggle);
-        footer.addView(awakeRow);
+        footerDetails.addView(awakeRow);
         renderAwakeToggle();
 
         LinearLayout secondFooter = new LinearLayout(this);
@@ -561,8 +568,48 @@ public final class MainActivity extends Activity {
             catch (Exception ignored) {}
         });
         secondFooter.addView(copyright);
-        footer.addView(secondFooter, sp);
-        root.addView(footer);
+        footerDetails.addView(secondFooter, sp);
+
+        LinearLayout footerSheet = new LinearLayout(this);
+        footerSheet.setOrientation(LinearLayout.VERTICAL);
+        footerSheet.setBackgroundColor(WHITE);
+
+        // Small, always-visible handle. Opening the drawer gives the flight board less space;
+        // closing restores the whole height because the flight frame has weight=1.
+        footerHandle = label("━━━━    Más opciones   ⌃", 11, SECONDARY, true);
+        footerHandle.setGravity(Gravity.CENTER);
+        footerHandle.setMinHeight(dp(34));
+        footerHandle.setPadding(dp(8), dp(5), dp(8), dp(5));
+        footerHandle.setBackground(rounded(WHITE, 11, 0xFFE1E8EF, 1));
+        footerHandle.setClickable(true);
+        footerHandle.setFocusable(true);
+        footerHandle.setOnClickListener(v -> setFooterExpanded(!footerExpanded, true));
+
+        final float[] downY = new float[1];
+        footerHandle.setOnTouchListener((v, event) -> {
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+                downY[0] = event.getY();
+                return true;
+            }
+            if(event.getActionMasked()==MotionEvent.ACTION_UP){
+                float delta=event.getY()-downY[0];
+                if(Math.abs(delta)>dp(25)){
+                    setFooterExpanded(FooterSheetPolicy.isExpandedAfterGesture(
+                        footerExpanded,delta,dp(25)),true);
+                } else v.performClick();
+                return true;
+            }
+            if(event.getActionMasked()==MotionEvent.ACTION_CANCEL)return true;
+            return true;
+        });
+        footerSheet.addView(footerHandle,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,dp(36)));
+        footerSheet.addView(footerDetails,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        // Collapsed by default: all detailed status controls stay available in the drawer.
+        setFooterExpanded(false,false);
+        root.addView(footerSheet);
+
 
         FrameLayout host=new FrameLayout(this);
         host.addView(root,new FrameLayout.LayoutParams(
@@ -598,6 +645,24 @@ public final class MainActivity extends Activity {
         pop.setMargins(dp(14),dp(12),dp(14),0);
         host.addView(foregroundAlertCard,pop);
         setContentView(host);
+    }
+
+    private void setFooterExpanded(boolean expanded,boolean animate){
+        if(footerDetails==null||footerHandle==null)return;
+        if(footerExpanded==expanded && footerDetails.getVisibility()==
+           (expanded?View.VISIBLE:View.GONE))return;
+        if(animate && mainColumn!=null){
+            AutoTransition transition=new AutoTransition();
+            transition.setDuration(190L);
+            TransitionManager.beginDelayedTransition(mainColumn,transition);
+        }
+        footerExpanded=expanded;
+        footerDetails.setVisibility(expanded?View.VISIBLE:View.GONE);
+        footerHandle.setText(expanded?"━━━━    Ocultar opciones   ⌄":"━━━━    Más opciones   ⌃");
+        footerHandle.setContentDescription(expanded?
+            "Ocultar controles y ampliar la lista de vuelos. Tocar o deslizar hacia abajo.":
+            "Mostrar última consulta, actualización, alertas, pantalla y fuente. Tocar o deslizar hacia arriba.");
+        footerHandle.setSelected(expanded);
     }
 
     private void showForegroundAlert(String title,String message){
