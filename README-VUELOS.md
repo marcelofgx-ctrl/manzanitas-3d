@@ -90,3 +90,12 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - La señalización vial real prevalece sobre el valor de mapa y el velocímetro GPS no sustituye el del vehículo.
 - Se conserva la función pantalla encendida de v1.10, los vuelos y sus avisos sin cambios funcionales.
 - QA en rama aislada. Requiere comprobar cobertura real de maxspeed en Montevideo/Canelones y validar físicamente en Samsung.
+
+## v1.12.0 — Solapa inferior contraída para priorizar los vuelos
+- Controles de actualización, avisos de vuelos, pantalla encendida, fecha de la última consulta y atribución de fuente quedan organizados en una solapa inferior, **cerrada de forma predeterminada**.
+- Solo permanece una pestaña inferior mínima «Más opciones» de 36 dp con indicador de agarre. Tocarla o deslizarla hacia arriba despliega los controles.
+- «Ocultar opciones» o deslizar hacia abajo vuelve a cerrarla. Animación discreta de 190 ms y descripción accesible para lector de pantalla.
+- El panel central de vuelos utiliza automáticamente toda la altura liberada. La solapa no flota encima de los vuelos: cambia el espacio de la lista sin tapar tarjetas.
+- No borra ni modifica configuraciones ni datos operativos. GPS, seguimiento, alertas y modo consulta continúan con la misma funcionalidad.
+- Se agregan pruebas unitarias de dirección del gesto y prevención de cierres accidentales.
+- Solo rama QA de Vuelos Uruguay; sin cambios en `main`, Quick Trip, Mapa QT, Supabase ni producción.
