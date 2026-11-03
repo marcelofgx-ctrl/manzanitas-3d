@@ -121,3 +121,13 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Si ambos atributos de límite direccional son numéricos y coinciden, puede utilizarlos; si difieren, no inventa un límite según una dirección desconocida.
 - Sin rastreo continuo en segundo plano, sin permisos nuevos, sin histórico de recorridos. Mantiene la advertencia de velocidad y resto de funcionalidades de Vuelos Uruguay.
 - La versión 1.13 se conserva. Todo el trabajo en QA aislada, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
+
+## v1.15.0 — Calle cercana arriba del velocímetro
+- Se añadió una fila compacta «CALLE CERCANA · APROX.» arriba de los bloques de velocidad GPS y límite del tramo. Android Geocoder muestra el nombre de la vía cercana; si OSM devuelve un tramo identificable, su nombre tiene prioridad.
+- Esta geocodificación no depende de Overpass; puede continuar funcionando aun cuando los servidores públicos de límites respondan con 502 o tiempo de espera, aunque la disponibilidad del proveedor de Android tampoco está garantizada.
+- Las solicitudes se limitan: al cambiar de zona y tras 25 segundos como mínimo, reintento de 60 segundos si falla y refresco periódico de 180 segundos. Sin almacenamiento de recorridos, sin ubicación en segundo plano.
+- La geocodificación puede enviar coordenadas al proveedor de Android. La explicación de permisos GPS informa de ello.
+- El nombre es orientativo y no se utiliza para inferir límites legales. «N/D» continúa apareciendo cuando no hay un límite verificado de la vía.
+- No se utilizan peticiones repetidas a la API central de OSM como sustituto de Overpass por la política de uso del servicio.
+- Conserva el diseño 1.14, las alertas y listas de vuelos, pantalla encendida y solapa inferior plegable. QA aislada, sin modificar Quick Trip, Mapa QT, Supabase, producción ni main.
+- Falta validación funcional física en Samsung.
