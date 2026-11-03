@@ -1,6 +1,8 @@
 package uy.vuelos.uruguay;
 
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -82,7 +84,8 @@ public final class DriverBoard extends ScrollView {
                 emptyInSource
                     ?"La fuente no devuelve registros para esa fecha. NO significa que no haya vuelos programados."
                     :"No se pudieron comprobar vuelos de esta fecha. Probá de nuevo o consultá el panel original.");
-            note();return;
+            note();
+            officialFallback();return;
         }
         ArrayList<FlightData.Flight> soon=new ArrayList<>(),later=new ArrayList<>(),landed=new ArrayList<>(),cancelled=new ArrayList<>();
         for(FlightData.Flight f:flights) {
@@ -125,6 +128,24 @@ public final class DriverBoard extends ScrollView {
             for(FlightData.Flight f:cancelled)flight(f,false,now,false);
         }
         note();
+    }
+    private void officialFallback(){
+        TextView verify=text("CONSULTAR ARRIBOS EN CARRASCO OFICIAL  ↗",12,TEAL,true);
+        verify.setGravity(Gravity.CENTER);
+        verify.setBackground(bg(0xFFE3F7F0,0xFFB6E2D3));
+        verify.setPadding(dp(12),dp(14),dp(12),dp(14));
+        verify.setOnClickListener(v->{
+            try{
+                Intent browser=new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://aeropuertodecarrasco.com.uy/panel-de-vuelos/"));
+                getContext().startActivity(browser);
+            }catch(Exception ignored){}
+        });
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin=dp(8);
+        params.bottomMargin=dp(8);
+        body.addView(verify,params);
     }
     private void note(){
         TextView caption=text("Fuente: Avionio. Los horarios están sujetos a cambios y un horario estimado no confirma el aterrizaje. Se agrupan códigos compartidos cuando coinciden hora y origen. Para cambiar fecha, tocá «Ver panel».",11,GREY,false);

@@ -1,4 +1,4 @@
-# Vuelos Uruguay Conductor v1.4 · QA
+# Vuelos Uruguay Conductor v1.4.1.1 · QA
 Aplicación Android independiente (paquete uy.vuelos.uruguay). 
 Fuentes: widget público de Avionio para Carrasco MVD, con atribución visible.
 - Muestra vuelos por fecha seleccionada dentro del panel original (incluido mañana).
@@ -10,4 +10,6 @@ Fuentes: widget público de Avionio para Carrasco MVD, con atribución visible.
 - El usuario puede cambiar fecha desde «Ver panel». Cuando la fuente no proporciona programación futura, no se inventan horarios.
 QA solo Android: requiere validación física Samsung.
 No se modifican Quick Trip, Supabase, Vercel ni la rama main de ningún proyecto.
-Firma debug, puede ser necesario desinstalar v1.3.1 antes de instalar v1.4.
+Firma debug, puede ser necesario desinstalar v1.3.1 antes de instalar v1.4.1.
+
+- Si Avionio responde sin registros, ofrece abrir el panel oficial de Carrasco para verificar una fecha futura.
