@@ -502,6 +502,12 @@ public final class MainActivity extends Activity {
 
     private void enterManualBrowsing(boolean showSource) {
         if(mode!=0)return;
+        if(!manualBrowsing){
+            // On switching dates, the previous day's list is not a valid preview.
+            flights.clear();
+            boardHasResults=false;
+            if(sourceWarning!=null)sourceWarning.setVisibility(View.GONE);
+        }
         manualBrowsing=true;
         handler.removeCallbacks(refreshTask);
         if(showSource)displayPriority(false);
@@ -563,7 +569,12 @@ public final class MainActivity extends Activity {
                 if(viewingOtherDate){
                     subheading.setText("Consulta: "+DateTimeFormatter.ofPattern("d MMM yyyy",new Locale("es","UY")).format(board.selectedDate));
                 }else subheading.setText("Horarios y estado de los vuelos");
-                if(viewingOtherDate && !manualBrowsing)enterManualBrowsing(false);
+                if(viewingOtherDate && !manualBrowsing){
+                    // Source may open tomorrow by default. Preserve the just-read rows.
+                    manualBrowsing=true;
+                    handler.removeCallbacks(refreshTask);
+                    renderModeTabs();
+                }
                 if(!manualBrowsing) displayPriority(true);
                 else displayPriority(false);
                 renderAuto();
