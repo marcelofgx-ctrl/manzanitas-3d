@@ -1,4 +1,4 @@
-name: QA probe OpenStreetMap speed limit data (no user location)
+name: QA direct OSM map API probe (no user location)
 on:
   push:
     branches: [qa/vuelos-uruguay-overpass-probe-20261103]
@@ -8,43 +8,30 @@ permissions:
 jobs:
   osm-probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Probe public Overpass speed tags around representative Montevideo city center
+      - name: Query small public OSM bounding box
         shell: bash
         run: |
           python3 - <<'PY'
-          import urllib.request,urllib.parse,urllib.error,json,time
-          # Representative non-user city-center coordinates; not the driver's location.
-          lat,lon=-34.906,-56.193
-          q=('[out:json][timeout:16];way(around:350,%.6f,%.6f)'
-             '["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|'
-             'unclassified|living_street|service|road)(|_link)$"];out tags geom;' % (lat,lon))
-          for server in ['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter']:
-              print('PROBE',server, 'query length',len(q),flush=True)
-              try:
-                  data=urllib.parse.urlencode({'data':q}).encode()
-                  req=urllib.request.Request(server,data=data,headers={
-                      'User-Agent':'VuelosUruguay-QA/1.14 (public backend diagnosis)',
-                      'Content-Type':'application/x-www-form-urlencoded; charset=utf-8'})
-                  with urllib.request.urlopen(req,timeout=28) as response:
-                      raw=response.read(2000000)
-                      print('HTTP',response.status,'BYTES',len(raw),flush=True)
-                  root=json.loads(raw)
-                  ways=[w for w in root.get('elements',[]) if w.get('type')=='way']
-                  tagged=[w for w in ways if w.get('tags',{}).get('maxspeed')]
-                  print('WAYS',len(ways),'WITH_MAXSPEED',len(tagged),
-                        'UNTAGGED',len(ways)-len(tagged),flush=True)
-                  print('SAMPLE TAGS',
-                        [(w.get('tags',{}).get('name',''),w.get('tags',{}).get('maxspeed',''))
-                         for w in ways[:12]],flush=True)
-                  if ways:
-                      print('BACKEND_DATA_OK',flush=True)
-                      break
-              except urllib.error.HTTPError as e:
-                  print('HTTP_ERROR',e.code,e.read(400).decode('utf8','replace'),flush=True)
-              except Exception as e:
-                  print('ERROR',str(e)[:300],flush=True)
-          else:
-              print('BACKEND_DATA_UNVERIFIED',flush=True)
+          import urllib.request,urllib.error,json,time
+          # Small representative Montevideo city-center area, not the user's location.
+          url='https://api.openstreetmap.org/api/0.6/map?bbox=-56.1935,-34.9063,-56.1925,-34.9057'
+          print('PROBE',url,flush=True)
+          try:
+              req=urllib.request.Request(url,headers={
+                  'User-Agent':'VuelosUruguay-QA/1.14 (public map coverage probe)',
+                  'Accept':'application/json'})
+              with urllib.request.urlopen(req,timeout=28) as r:
+                  body=r.read(3000000)
+                  print('HTTP',r.status,'BYTES',len(body),'CONTENT_TYPE',r.headers.get('Content-Type'),flush=True)
+              j=json.loads(body)
+              ways=[w for w in j.get('elements',[]) if w.get('type')=='way' and 'highway' in w.get('tags',{})]
+              tagged=[w for w in ways if w.get('tags',{}).get('maxspeed')]
+              print('WAYS',len(ways),'WITH_MAXSPEED',len(tagged),'UNTAGGED',len(ways)-len(tagged),flush=True)
+              print('SAMPLE',[(w.get('tags',{}).get('name',''),w.get('tags',{}).get('maxspeed','')) for w in ways[:15]],flush=True)
+          except urllib.error.HTTPError as e:
+              print('HTTP_ERROR',e.code,e.read(300).decode('utf8','replace'),flush=True)
+          except Exception as e:
+              print('ERROR',str(e)[:300],flush=True)
           PY
