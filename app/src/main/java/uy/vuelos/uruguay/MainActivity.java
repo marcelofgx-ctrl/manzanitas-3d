@@ -1,6 +1,7 @@
 package uy.vuelos.uruguay;
 
 import android.app.Activity;
+import android.view.WindowManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.IntentFilter;
@@ -86,7 +87,8 @@ public final class MainActivity extends Activity {
     private LinearLayout errorLayer;
     private TextView heading, subheading, localTime, arrivalTab, departureTab, status, autoSwitch, lastUpdate;
     private TextView refreshButton;
-    private TextView driverToggle, alertsToggle;
+    private TextView driverToggle, alertsToggle, awakeToggle;
+    private boolean keepScreenAwake = true;
     private LinearLayout foregroundAlertCard;
     private TextView foregroundAlertTitle, foregroundAlertBody;
     private boolean alertReceiverRegistered=false;
@@ -153,6 +155,7 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(NAVY);
         getWindow().setNavigationBarColor(NAVY);
         autoRefresh = getPreferences(MODE_PRIVATE).getBoolean("autoRefresh", true);
+        keepScreenAwake = getPreferences(MODE_PRIVATE).getBoolean("keepScreenAwake", true);
         LocalDate tomorrow=LocalDate.now(FlightData.UY).plusDays(1);
         String savedDate=getPreferences(MODE_PRIVATE).getString("futureDate",tomorrow.toString());
         try{futureDate=LocalDate.parse(savedDate);}catch(Exception ignored){futureDate=tomorrow;}
@@ -525,6 +528,20 @@ public final class MainActivity extends Activity {
         alertsToggle.setOnClickListener(v -> toggleFlightAlerts());
         noticeBar.addView(alertsToggle);
         footer.addView(noticeBar);
+
+        LinearLayout awakeRow=new LinearLayout(this);
+        awakeRow.setGravity(Gravity.CENTER_VERTICAL);
+        awakeRow.setPadding(0,dp(3),0,dp(3));
+        TextView awakeCaption=label("Pantalla encendida mientras usás la app",10,SECONDARY,false);
+        awakeRow.addView(awakeCaption,new LinearLayout.LayoutParams(
+            0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        awakeToggle=label("",11,TEXT,true);
+        awakeToggle.setGravity(Gravity.CENTER);
+        awakeToggle.setPadding(dp(9),dp(6),dp(9),dp(6));
+        awakeToggle.setOnClickListener(v -> toggleKeepScreenAwake());
+        awakeRow.addView(awakeToggle);
+        footer.addView(awakeRow);
+        renderAwakeToggle();
 
         LinearLayout secondFooter = new LinearLayout(this);
         secondFooter.setGravity(Gravity.CENTER_VERTICAL);
@@ -952,6 +969,32 @@ public final class MainActivity extends Activity {
         scheduleAutoRefresh();
     }
 
+    private void applyKeepScreenAwake() {
+        // FLAG_KEEP_SCREEN_ON prevents inactivity timeout only while the Activity is visible.
+        // It does not acquire a wake lock, bypass the power button, or keep an app in the foreground.
+        if(foreground && keepScreenAwake)
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private void renderAwakeToggle() {
+        if(awakeToggle==null)return;
+        awakeToggle.setText(keepScreenAwake ? "☀ ACTIVADA" : "○ NORMAL");
+        awakeToggle.setTextColor(keepScreenAwake ? 0xFF0B785D : SECONDARY);
+        awakeToggle.setBackground(rounded(keepScreenAwake?0xFFE1F8EA:0xFFE8EDF2,14,0,0));
+        awakeToggle.setContentDescription(keepScreenAwake
+            ? "Pantalla siempre activa mientras Vuelos Uruguay está visible. Tocar para usar el apagado normal."
+            : "Pantalla con apagado normal. Tocar para mantenerla encendida mientras Vuelos Uruguay está visible.");
+    }
+
+    private void toggleKeepScreenAwake() {
+        keepScreenAwake=!keepScreenAwake;
+        getPreferences(MODE_PRIVATE).edit().putBoolean("keepScreenAwake",keepScreenAwake).apply();
+        applyKeepScreenAwake();
+        renderAwakeToggle();
+    }
+
     private void scheduleAutoRefresh() {
         handler.removeCallbacks(refreshTask);
         if (RefreshModePolicy.shouldReload(foreground,autoRefresh,manualBrowsing,viewingOtherDate)) handler.postDelayed(refreshTask, REFRESH_MS);
@@ -960,6 +1003,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         foreground = true;
+        applyKeepScreenAwake();
         if(!alertReceiverRegistered){
             IntentFilter filter=new IntentFilter(FlightAlertReceiver.ACTION_UI);
             if(Build.VERSION.SDK_INT>=33)
@@ -977,6 +1021,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         foreground = false;
+        applyKeepScreenAwake();
         if(alertReceiverRegistered){
             try{unregisterReceiver(foregroundAlertReceiver);}catch(Exception ignored){}
             alertReceiverRegistered=false;
