@@ -183,3 +183,11 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Esta corrección no crea datos de vuelos: si Avionio deja de publicar vuelos de hoy, no puede fabricar arribos y se informa la fecha real del tablero.
 - Mantiene el velocímetro y las mejoras de mapa offline de v1.19; sin cambios en producción, main, Quick Trip, Mapa QT, Supabase ni otros motores.
 - Rama QA aislada. Falta validación física en Samsung.
+
+## v1.21.0 — Cápsula de calle de lado a lado
+- Alineada con las tarjetas «Velocidad actual» y «Límite del tramo»: ocupa todo el ancho disponible de ambas tarjetas, no solo una pequeña pastilla centrada.
+- Mantiene libre el control GPS de 70 dp y 7 dp de espacio; ancho flexible adaptable a Samsung.
+- Nombre de calle a la izquierda, con 14 dp de margen interno, tipografía legible de 15 sp peso medio, una línea y elipsis si es largo.
+- Conserva fondo claro, bordes sutiles y solo 34 dp de altura, sin restar protagonismo a la lista de vuelos.
+- Solo layout visual, sin cambios en geocodificación, velocidades, cartografía offline, notificaciones, flujos de vuelos, pantalla encendida ni estados de reserva.
+- QA aislada desde v1.20. Main, Supabase, Quick Trip, Mapa QT y producción no se modifican. Falta validar aspecto físico en Samsung.
