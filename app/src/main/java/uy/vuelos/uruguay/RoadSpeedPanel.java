@@ -210,9 +210,9 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         if(enabled)start();
         else {
             roadStatus="Ubicación precisa pendiente · habilitala en permisos";
-            renderStreetName();
             renderSpeedColors();
         }
+        renderStreetName();
     }
     public void pause(){
         resumed=false;
