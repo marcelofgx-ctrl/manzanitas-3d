@@ -6,8 +6,8 @@ android {
    applicationId = "uy.vuelos.uruguay"
    minSdk = 26
    targetSdk = 34
-   versionCode = 26
-   versionName = "1.22.0"
+   versionCode = 27
+   versionName = "1.23.0"
  }
  compileOptions {
    sourceCompatibility = JavaVersion.VERSION_17
