@@ -75,4 +75,60 @@ public final class RoadSpeedMatcherTest {
     @Test public void emptyReturnsUnknown()throws Exception{
         assertTrue(RoadSpeedMatcher.parseOverpass("{\"elements\":[]}").isEmpty());
     }
+    @Test public void avenueKeepsRecordedLimitAcrossPerpendicularCrossingWhileMoving(){
+        RoadSpeedMatcher.Road avenue=new RoadSpeedMatcher.Road(1001,"Avenida Italia",60,
+            new double[][]{{-34.911,-56.16},{-34.909,-56.16}});
+        RoadSpeedMatcher.Road cross=new RoadSpeedMatcher.Road(2002,"Calle transversal",45,
+            new double[][]{{-34.910,-56.161},{-34.910,-56.159}});
+        List<RoadSpeedMatcher.Road> ways=Arrays.asList(avenue,cross);
+        // Same GPS location: too ambiguous without a direction.
+        assertEquals(RoadSpeedMatcher.AMBIGUOUS,
+            RoadSpeedMatcher.nearest(ways,-34.91001,-56.16001,5f).reason);
+        // GPS north/south on Avenida Italia makes the perpendicular avenue ineligible.
+        RoadSpeedMatcher.Match north=RoadSpeedMatcher.nearest(ways,
+            -34.91001,-56.16001,5f,0.0);
+        assertTrue(north.confident);
+        assertEquals(60,north.limitKmh);
+        assertEquals("Avenida Italia",north.name);
+        // After crossing, position varies but remains on the same known avenue.
+        assertEquals(60,RoadSpeedMatcher.nearest(ways,
+            -34.90993,-56.160015,5f,178.0).limitKmh);
+        // Direction across the street supports the OTHER recorded speed, not a guess.
+        RoadSpeedMatcher.Match east=RoadSpeedMatcher.nearest(ways,
+            -34.91001,-56.16001,5f,90.0);
+        assertTrue(east.confident);
+        assertEquals(45,east.limitKmh);
+    }
+
+    @Test public void bearingMustNotGuessBetweenParallelRoads(){
+        List<RoadSpeedMatcher.Road> ways=Arrays.asList(
+            road(1,"Carril principal",60,-56.1600),
+            road(2,"Calzada lateral",45,-56.16005));
+        RoadSpeedMatcher.Match m=RoadSpeedMatcher.nearest(ways,
+            -34.91,-56.16002,5f,0.0);
+        assertEquals(RoadSpeedMatcher.AMBIGUOUS,m.reason);
+        assertFalse(m.confident);
+    }
+
+    @Test public void realSpeedChangeAlongSameAvenueStillRequiresDisambiguation(){
+        RoadSpeedMatcher.Road a=new RoadSpeedMatcher.Road(1,"Avenida Italia",60,
+            new double[][]{{-34.911,-56.16},{-34.910,-56.16}});
+        RoadSpeedMatcher.Road b=new RoadSpeedMatcher.Road(2,"Avenida Italia",45,
+            new double[][]{{-34.910,-56.16},{-34.909,-56.16}});
+        RoadSpeedMatcher.Match m=RoadSpeedMatcher.nearest(Arrays.asList(a,b),
+            -34.910,-56.16,5f,0.0);
+        assertEquals(RoadSpeedMatcher.AMBIGUOUS,m.reason);
+    }
+
+    @Test public void duplicatePiecesFromSameOsmWayCannotCreateConflictingLimit(){
+        RoadSpeedMatcher.Road a=new RoadSpeedMatcher.Road(77,"Avenida Italia",60,
+            new double[][]{{-34.912,-56.16},{-34.910,-56.16}});
+        RoadSpeedMatcher.Road b=new RoadSpeedMatcher.Road(77,"Avenida Italia",60,
+            new double[][]{{-34.910,-56.16},{-34.908,-56.16}});
+        RoadSpeedMatcher.Match m=RoadSpeedMatcher.nearest(Arrays.asList(a,b),
+            -34.909,-56.160005,6f);
+        assertTrue(m.confident);
+        assertEquals(60,m.limitKmh);
+    }
+
 }
