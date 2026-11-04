@@ -287,19 +287,19 @@ public final class MainActivity extends Activity {
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        TextView caption = label("   MOVIMIENTOS DE VUELOS", 11, 0xFF5C788D, true);
+        TextView caption = label("MOVIMIENTOS DE VUELOS", 11, 0xFF5C788D, true);
         caption.setLetterSpacing(0.08f);
-        caption.setPadding(dp(9), dp(7), dp(9), dp(5));
+        caption.setPadding(dp(11), dp(4), dp(6), dp(2));
         LinearLayout modeBar = new LinearLayout(this);
-        modeBar.setPadding(dp(8),dp(4),dp(8),dp(2));
+        modeBar.setPadding(dp(8),dp(3),dp(8),dp(1));
         modeBar.setGravity(Gravity.CENTER_VERTICAL);
         liveModeTab = label("●  HOY · EN VIVO",12,TEXT,true);
         liveModeTab.setGravity(Gravity.CENTER);
-        liveModeTab.setPadding(dp(5),dp(8),dp(5),dp(8));
+        liveModeTab.setPadding(dp(5),dp(7),dp(5),dp(7));
         liveModeTab.setOnClickListener(v -> returnToLive());
         manualModeTab = label("◷  CONSULTAR FECHA",12,TEXT,true);
         manualModeTab.setGravity(Gravity.CENTER);
-        manualModeTab.setPadding(dp(5),dp(8),dp(5),dp(8));
+        manualModeTab.setPadding(dp(5),dp(7),dp(5),dp(7));
         manualModeTab.setOnClickListener(v -> enterManualBrowsing(true));
         LinearLayout.LayoutParams liveLp = new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1);
         liveLp.rightMargin=dp(4);
@@ -362,7 +362,7 @@ public final class MainActivity extends Activity {
         captionLine.setGravity(Gravity.CENTER_VERTICAL);
         captionLine.addView(caption,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         driverToggle = label("PANEL ↗",11,0xFF167866,true);
-        driverToggle.setPadding(dp(10),dp(8),dp(10),dp(8));
+        driverToggle.setPadding(dp(9),dp(5),dp(9),dp(5));
         driverToggle.setOnClickListener(v -> {
             if(manualBrowsing){
                 try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://www.flightstats.com/v2/flight-tracker/arrivals/MVD")));}
