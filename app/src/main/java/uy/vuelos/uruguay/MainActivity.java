@@ -1062,7 +1062,8 @@ public final class MainActivity extends Activity {
         requestLocationAtStart();
     }
     private void requestLocationAtStart(){
-        if(!foreground){permissionFlowActive=false;return;}
+        // A permission result can arrive while Android is re-focusing this Activity.
+        // Do not abort the other pending request just because onResume is in flight.
         if(fineLocationGranted()){
             if(roadSpeedPanel!=null)roadSpeedPanel.permissionResult(new int[0]);
             requestNotificationsAtStart();
@@ -1082,7 +1083,6 @@ public final class MainActivity extends Activity {
             Manifest.permission.ACCESS_COARSE_LOCATION},RoadSpeedPanel.REQUEST_LOCATION);
     }
     private void requestNotificationsAtStart(){
-        if(!foreground){permissionFlowActive=false;return;}
         if(notificationsGranted()){
             enableNewInstallFlightAlerts();
             finishStartupPermissions();
