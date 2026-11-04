@@ -13,28 +13,40 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /** Read a locally bundled OSM snapshot. No network, no accounts, no GPS history.
- * Only the tile containing the user's current position is loaded on demand.
+ * Foreground 3x3 neighborhood prefetch + bounded main-thread tile LRU.
+ * Every numeric limit is computed against CURRENT GPS and road geometry.
  */
 public final class OfflineRoadLookup {
     public interface Callback { void onLimit(RoadSpeedMatcher.Match match,String description); }
     private static final String ASSET="uy_roads_offline.zip";
-    private static final String LOCAL="uy_roads_offline_v117.zip";
+    private static final String LOCAL="uy_roads_offline_v123.zip";
     private static final double MIN_LAT=-35.15,MAX_LAT=-34.05,MIN_LON=-57.3,MAX_LON=-55.2;
     private final Context context;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private ZipFile zip;
-    private boolean active=false,pending=false;
+    private boolean active=false;
     private int generation=0;
-    private int loadedLat=Integer.MAX_VALUE,loadedLon=Integer.MAX_VALUE;
-    private List<RoadSpeedMatcher.Road> cached=Collections.emptyList();
+    // All cache and in-flight bookkeeping stays on the main thread.
+    private static final int MAX_CACHED_TILES=24;
+    private final LinkedHashMap<Long,List<RoadSpeedMatcher.Road>> tileCache =
+        new LinkedHashMap<>(32,0.75f,true);
+    private final Set<Long> loading=new HashSet<>();
+    private long lastServedKey=Long.MIN_VALUE;
+    private long warmedKey=Long.MIN_VALUE;
     private Location latestFix;
+    private Callback latestCallback;
     private String cacheError="";
     private final MovingCourseFilter courseFilter=new MovingCourseFilter();
     private double heading=Double.NaN;
@@ -42,9 +54,10 @@ public final class OfflineRoadLookup {
     public OfflineRoadLookup(Context ctx){context=ctx.getApplicationContext();}
     public void resume(){active=true;}
     public void pause(){
-        active=false;pending=false;generation++;
-        loadedLat=Integer.MAX_VALUE;loadedLon=Integer.MAX_VALUE;
-        cached=Collections.emptyList();latestFix=null;cacheError="";
+        active=false;generation++;
+        tileCache.clear();loading.clear();
+        lastServedKey=Long.MIN_VALUE;warmedKey=Long.MIN_VALUE;
+        latestFix=null;latestCallback=null;cacheError="";
         courseFilter.reset();heading=Double.NaN;
     }
     public void close(){
@@ -73,8 +86,9 @@ public final class OfflineRoadLookup {
     public void onLocation(Location position,Callback callback){
         if(!active||position==null)return;
         latestFix=new Location(position);
-        // Prefer precise GPS heading; when Android omits bearing accuracy, derive
-        // course conservatively from >=42m of accurate real movement.
+        latestCallback=callback;
+        // GPS heading is used only with bearing accuracy, or a measured
+        // displacement: never infer a road limit from the street name alone.
         heading=courseFilter.sample(position.getLatitude(),position.getLongitude(),
             position.hasAccuracy()?position.getAccuracy():Float.POSITIVE_INFINITY,
             position.hasSpeed()?position.getSpeed():0f,
@@ -82,68 +96,104 @@ public final class OfflineRoadLookup {
             position.hasBearing()?position.getBearing():Double.NaN,
             android.os.Build.VERSION.SDK_INT>=26 && position.hasBearingAccuracy()
                 ?position.getBearingAccuracyDegrees():Double.NaN);
-        float acc=position.hasAccuracy()?position.getAccuracy():Float.POSITIVE_INFINITY;
-        if(acc<=0||acc>25f){
+        float accuracy=position.hasAccuracy()?position.getAccuracy():Float.POSITIVE_INFINITY;
+        if(accuracy<=0||accuracy>25f){
             callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
-                "GPS impreciso: límite sin confirmar");
+                "GPS impreciso · no se confirma límite");
             return;
         }
         double lat=position.getLatitude(),lon=position.getLongitude();
         if(lat<MIN_LAT||lat>MAX_LAT||lon<MIN_LON||lon>MAX_LON){
             callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
-                "Fuera de la cobertura local Montevideo y Canelones");
+                "Fuera de la cobertura cartográfica local");
             return;
         }
-        int a=(int)Math.floor(lat*100.0),b=(int)Math.floor(lon*100.0);
-        if(a==loadedLat&&b==loadedLon){
-            RoadSpeedMatcher.Match match=match(cached,position);
-            callback.onLimit(match,explain(match));
+        int a=OfflineTilePolicy.cell(lat),b=OfflineTilePolicy.cell(lon);
+        long key=OfflineTilePolicy.key(a,b);
+        List<RoadSpeedMatcher.Road> current=tileCache.get(key);
+        if(current!=null){
+            lastServedKey=key;
+            RoadSpeedMatcher.Match result=match(current,position);
+            callback.onLimit(result,explain(result));
+            warmAround(a,b);
             return;
         }
-        // A tiny, bounded handoff at a 1km tile boundary can be resolved
-        // using fully mapped overlapping segments from the previously loaded tile.
-        // No "last speed" is reused; the CURRENT location is re-matched to geometry.
-        boolean safePreviousTile=OfflineTilePolicy.withinSafeLoadedMargin(
-            loadedLat,loadedLon,lat,lon);
-        RoadSpeedMatcher.Match previous=safePreviousTile?
-            match(cached,position):RoadSpeedMatcher.Match.unavailable();
-        if(previous.confident && previous.distanceMeters<=15f)
-            callback.onLimit(previous,"Límite cartográfico · cambio de celda");
+        // At a boundary, only geometry from the prior tile may justify a
+        // numeric handoff; never reuse a previously displayed speed by itself.
+        RoadSpeedMatcher.Match previous=RoadSpeedMatcher.Match.unavailable();
+        if(lastServedKey!=Long.MIN_VALUE){
+            int oldA=OfflineTilePolicy.latitudeOf(lastServedKey);
+            int oldB=OfflineTilePolicy.longitudeOf(lastServedKey);
+            List<RoadSpeedMatcher.Road> old=tileCache.get(lastServedKey);
+            if(old!=null && OfflineTilePolicy.withinSafeLoadedMargin(oldA,oldB,lat,lon))
+                previous=match(old,position);
+        }
+        if(previous.confident && previous.distanceMeters<=12f)
+            callback.onLimit(previous,"Límite cartográfico · transición entre zonas");
         else callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
-            pending?"Buscando límite en mapa local…":cacheError.isEmpty()?
-            "Leyendo mapa local…":cacheError);
-        if(pending)return;
-        pending=true;
-        final int request=++generation;
+            "Leyendo tramo cartográfico…");
+        scheduleRead(a,b);
+    }
+
+    private void warmAround(int a,int b){
+        long center=OfflineTilePolicy.key(a,b);
+        if(warmedKey==center)return;
+        warmedKey=center;
+        // Preload all eight adjacent 1km cells. No GPS/network service
+        // is used: the local OSM archive is already bundled in the APK.
+        // Read one at a time on the worker; keep cache bounded to 24 tiles.
+        for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++){
+            if(x==0 && y==0)continue;
+            int aa=a+x,bb=b+y;
+            double latitude=(aa+0.5)/100.0,longitude=(bb+0.5)/100.0;
+            if(latitude>=MIN_LAT && latitude<=MAX_LAT &&
+               longitude>=MIN_LON && longitude<=MAX_LON)
+                scheduleRead(aa,bb);
+        }
+    }
+
+    private void scheduleRead(int a,int b){
+        long key=OfflineTilePolicy.key(a,b);
+        if(tileCache.containsKey(key)||loading.contains(key)||!active)return;
+        loading.add(key);
+        final int requestGeneration=generation;
         worker.execute(()->{
             List<RoadSpeedMatcher.Road> found=Collections.emptyList();
-            String err="";
-            try {found=readTile(a,b);}
-            catch(Exception e){err="Error al leer base cartográfica local";}
+            String error="";
+            try{found=readTile(a,b);}
+            catch(Exception e){error="No se pudo leer el mapa local";}
             final List<RoadSpeedMatcher.Road> answer=found;
-            final String error=err;
+            final String problem=error;
             main.post(()->{
-                if(!active||generation!=request)return;
-                pending=false;cacheError=error;
-                if(error.isEmpty()){
-                    loadedLat=a;loadedLon=b;cached=answer;
+                if(!active||generation!=requestGeneration)return;
+                loading.remove(key);
+                if(!problem.isEmpty()){
+                    cacheError=problem;
+                    if(latestFix!=null &&
+                      OfflineTilePolicy.key(OfflineTilePolicy.cell(latestFix.getLatitude()),
+                          OfflineTilePolicy.cell(latestFix.getLongitude()))==key &&
+                      latestCallback!=null)
+                        latestCallback.onLimit(RoadSpeedMatcher.Match.unavailable(),problem);
+                    return;
                 }
+                tileCache.put(key,answer);
+                while(tileCache.size()>MAX_CACHED_TILES){
+                    Iterator<Map.Entry<Long,List<RoadSpeedMatcher.Road>>> it=
+                        tileCache.entrySet().iterator();
+                    if(it.hasNext()){it.next();it.remove();}
+                }
+                // Re-evaluate the latest GPS fix, never the stale fix that
+                // triggered a background read and never the last displayed limit.
                 Location current=latestFix;
-                if(current==null)return;
-                int c=(int)Math.floor(current.getLatitude()*100.0);
-                int d=(int)Math.floor(current.getLongitude()*100.0);
-                if(c!=a||d!=b){
-                    // If the vehicle moved into another tile mid-read, let next fix trigger it.
-                    callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
-                        "Cambiando de zona cartográfica…");
-                    return;
-                }
-                if(!error.isEmpty()){
-                    callback.onLimit(RoadSpeedMatcher.Match.unavailable(),error);
-                    return;
-                }
-                RoadSpeedMatcher.Match match=match(cached,current);
-                callback.onLimit(match,explain(match));
+                if(current==null || latestCallback==null)return;
+                long actualKey=OfflineTilePolicy.key(
+                    OfflineTilePolicy.cell(current.getLatitude()),
+                    OfflineTilePolicy.cell(current.getLongitude()));
+                if(actualKey!=key)return;
+                RoadSpeedMatcher.Match result=match(answer,current);
+                lastServedKey=key;
+                latestCallback.onLimit(result,explain(result));
+                warmAround(a,b);
             });
         });
     }
