@@ -41,6 +41,9 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     private LinearLayout speedTile, limitTile;
     private TextView speedCaption, limitCaption, streetValue;
     private String nearbyStreet="", mapStreet="";
+    private String lastVisibleStreet="";
+    private long lastStreetConfirmedMs=0L;
+    private Location lastStreetFix, lastSpeedFix;
     private String roadStatus = "Límite no disponible";
     private boolean resumed=false, tracking=false, enabled, warnings;
     private boolean hasUsableSpeed=false;
@@ -63,23 +66,25 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         LinearLayout streetLine=new LinearLayout(a);
         streetLine.setGravity(Gravity.CENTER_VERTICAL);
         FrameLayout streetArea=new FrameLayout(a);
-        streetValue=text("Activá GPS",12,NAVY,true);
+        streetValue=text("Activá GPS",14,NAVY,false);
+        streetValue.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        streetValue.setLetterSpacing(0.005f);
         streetValue.setSingleLine(true);
         streetValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
         streetValue.setGravity(Gravity.CENTER);
-        streetValue.setMinWidth(dp(120));
-        streetValue.setMaxWidth(dp(235));
-        streetValue.setPadding(dp(10),dp(2),dp(10),dp(2));
+        streetValue.setMinWidth(dp(128));
+        streetValue.setMaxWidth(dp(275));
+        streetValue.setPadding(dp(12),dp(2),dp(12),dp(2));
         streetValue.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
         FrameLayout.LayoutParams pillParams=new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,dp(28),Gravity.CENTER);
+            ViewGroup.LayoutParams.WRAP_CONTENT,dp(34),Gravity.CENTER);
         streetArea.addView(streetValue,pillParams);
         streetLine.addView(streetArea,new LinearLayout.LayoutParams(
-            0,dp(28),1f));
+            0,dp(34),1f));
         // The 70dp spacer lines the badge up between velocity and limit.
         streetLine.addView(new View(a),new LinearLayout.LayoutParams(dp(70),dp(1)));
         LinearLayout.LayoutParams streetParams=new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,dp(28));
+            ViewGroup.LayoutParams.MATCH_PARENT,dp(34));
         streetParams.bottomMargin=dp(5);
         addView(streetLine,streetParams);
 
@@ -293,6 +298,10 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         streetLookup.pause();
         nearbyStreet="";
         mapStreet="";
+        lastVisibleStreet="";
+        lastStreetConfirmedMs=0L;
+        lastStreetFix=null;
+        lastSpeedFix=null;
         renderStreetName();
         currentKmh=-1;
         currentLimit=0;
@@ -305,6 +314,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     }
     @Override public void onLocationChanged(Location location){
         if(!tracking || !resumed || !enabled || location==null)return;
+        lastSpeedFix=new Location(location);
         streetLookup.onLocation(location,name->{
             if(!tracking||!resumed||!enabled)return;
             nearbyStreet=name;
@@ -326,8 +336,13 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         }
         lookup.onLocation(location,(match,state)->{
             if(!resumed||!enabled||!tracking)return;
+            // A sufficiently near mapped street can give an approximate NAME
+            // even when a competing legal speed limit cannot be distinguished.
+            // This does NOT authorize or preserve any numeric speed limit.
             mapStreet=(match.name!=null && !match.name.isEmpty() &&
-              (match.confident || RoadSpeedMatcher.NO_LIMIT.equals(match.reason)))
+              (match.confident || RoadSpeedMatcher.NO_LIMIT.equals(match.reason) ||
+               (RoadSpeedMatcher.AMBIGUOUS.equals(match.reason) &&
+                match.distanceMeters<=12.0)))
                 ? StreetNamePolicy.clean(match.name):"";
             renderStreetName();
             currentLimit=match.confident?match.limitKmh:0;
@@ -341,20 +356,41 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         updateWarning();
     }
 
+    private static boolean isActualStreetName(String value){
+        return value!=null && !value.isEmpty() &&
+            !value.contains("…") && !value.startsWith("Nombre de calle") &&
+            !value.startsWith("Ubicación imprecisa");
+    }
+
     private void renderStreetName(){
         if(streetValue==null)return;
+        String name="";
         if(!enabled){
-            streetValue.setText("Activá GPS");
+            name="Activá GPS";
         }else if(!tracking){
-            streetValue.setText("Esperando GPS…");
-        }else if(!mapStreet.isEmpty()){
-            streetValue.setText(mapStreet);
+            name="Esperando GPS…";
         }else{
-            String name=nearbyStreet;
-            streetValue.setText(name.isEmpty()?"Buscando calle…":name);
+            if(isActualStreetName(mapStreet))name=mapStreet;
+            else if(isActualStreetName(nearbyStreet))name=nearbyStreet;
+
+            long now=SystemClock.elapsedRealtime();
+            if(!name.isEmpty()){
+                lastVisibleStreet=name;
+                lastStreetConfirmedMs=now;
+                if(lastSpeedFix!=null)lastStreetFix=new Location(lastSpeedFix);
+            }else if(lastStreetFix!=null && !lastVisibleStreet.isEmpty() &&
+              now-lastStreetConfirmedMs<4500L &&
+              lastSpeedFix!=null && lastStreetFix.distanceTo(lastSpeedFix)<55f){
+                // Avoid a one-frame "Buscando…" flash while a new map tile is read.
+                // This is a street NAME only; the limit resets immediately when uncertain.
+                name=lastVisibleStreet;
+            }else{
+                name=nearbyStreet.isEmpty()?"Buscando calle…":nearbyStreet;
+            }
         }
-        streetValue.setContentDescription("Calle cercana aproximada: "+streetValue.getText()+
-            ". El nombre no confirma el límite de velocidad.");
+        streetValue.setText(name);
+        streetValue.setContentDescription("Nombre aproximado de la calle: "+name+
+            ". El límite se comprueba por separado con el mapa local.");
     }
 
     private void renderSpeedColors(){
