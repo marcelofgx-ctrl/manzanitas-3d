@@ -7,6 +7,8 @@ import android.transition.AutoTransition;
 import android.transition.TransitionManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.provider.Settings;
 import android.content.IntentFilter;
 import android.app.AlertDialog;
 import android.text.InputType;
@@ -95,6 +97,14 @@ public final class MainActivity extends Activity {
     private LinearLayout footerDetails, mainColumn;
     private boolean footerExpanded = false;
     private RoadSpeedPanel roadSpeedPanel;
+    // Android grants location and notifications separately, at first launch.
+    // Retry missing permissions on the next foreground visit, never in a loop.
+    private boolean permissionsCheckedThisForeground=false;
+    private boolean permissionFlowActive=false;
+    private boolean locationSettingsNeeded=false;
+    private boolean notificationSettingsNeeded=false;
+    private static final String ASKED_LOCATION="startup_location_requested";
+    private static final String ASKED_NOTIFICATIONS="startup_notifications_requested";
     private boolean keepScreenAwake = true;
     private LinearLayout foregroundAlertCard;
     private TextView foregroundAlertTitle, foregroundAlertBody;
@@ -1024,13 +1034,108 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private boolean fineLocationGranted(){
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==
+            PackageManager.PERMISSION_GRANTED;
+    }
+    private boolean notificationsGranted(){
+        return Build.VERSION.SDK_INT<33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==
+                PackageManager.PERMISSION_GRANTED;
+    }
+    private void enableNewInstallFlightAlerts(){
+        // Granting notification permission does not override an existing
+        // user's explicit preference to disable or mute flight notifications.
+        SharedPreferences prefs=getSharedPreferences(FlightAlerts.SETTINGS,MODE_PRIVATE);
+        if(notificationsGranted() && !prefs.contains("enabled")){
+            FlightAlerts.setEnabled(this,true);
+            FlightAlertReceiver.createChannels(this);
+        }
+        renderAlertsToggle();
+    }
+    private void beginStartupPermissions(){
+        if(!foreground||permissionFlowActive||permissionsCheckedThisForeground)return;
+        permissionsCheckedThisForeground=true;
+        permissionFlowActive=true;
+        locationSettingsNeeded=false;
+        notificationSettingsNeeded=false;
+        requestLocationAtStart();
+    }
+    private void requestLocationAtStart(){
+        if(!foreground){permissionFlowActive=false;return;}
+        if(fineLocationGranted()){
+            if(roadSpeedPanel!=null)roadSpeedPanel.permissionResult(new int[0]);
+            requestNotificationsAtStart();
+            return;
+        }
+        SharedPreferences prefs=getPreferences(MODE_PRIVATE);
+        boolean asked=prefs.getBoolean(ASKED_LOCATION,false);
+        if(asked &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)){
+            locationSettingsNeeded=true;
+            requestNotificationsAtStart();
+            return;
+        }
+        prefs.edit().putBoolean(ASKED_LOCATION,true).apply();
+        requestPermissions(new String[]{
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION},RoadSpeedPanel.REQUEST_LOCATION);
+    }
+    private void requestNotificationsAtStart(){
+        if(!foreground){permissionFlowActive=false;return;}
+        if(notificationsGranted()){
+            enableNewInstallFlightAlerts();
+            finishStartupPermissions();
+            return;
+        }
+        SharedPreferences prefs=getPreferences(MODE_PRIVATE);
+        boolean asked=prefs.getBoolean(ASKED_NOTIFICATIONS,false);
+        if(asked &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)){
+            notificationSettingsNeeded=true;
+            finishStartupPermissions();
+            return;
+        }
+        prefs.edit().putBoolean(ASKED_NOTIFICATIONS,true).apply();
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},303);
+    }
+    private void finishStartupPermissions(){
+        permissionFlowActive=false;
+        if(!foreground)return;
+        if(!locationSettingsNeeded && !notificationSettingsNeeded)return;
+        String missing=locationSettingsNeeded && notificationSettingsNeeded
+            ?"ubicación precisa y notificaciones":locationSettingsNeeded
+            ?"ubicación precisa":"notificaciones";
+        // After permanent Android denial a native prompt cannot be forced.
+        // Offer the system settings rather than spamming an ineffective dialog.
+        new AlertDialog.Builder(this)
+            .setTitle("Permisos pendientes")
+            .setMessage("Para activar todas las funciones falta autorizar: "+
+                missing+". Android requiere habilitarlos desde los ajustes del teléfono.")
+            .setNegativeButton("Más tarde",(d,w)->{})
+            .setPositiveButton("Abrir permisos",(d,w)->{
+                try{
+                    Intent intent=new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:"+getPackageName()));
+                    startActivity(intent);
+                }catch(Exception ignored){}
+            }).show();
+    }
+
     @Override public void onRequestPermissionsResult(int code,String[] perms,int[] result){
         super.onRequestPermissionsResult(code,perms,result);
-        if(code==303){
-            if(result.length>0 && result[0]==PackageManager.PERMISSION_GRANTED)enableFlightAlerts();
-            else status.setText("Sin permisos de notificación: alertas desactivadas");
-        } else if(code==RoadSpeedPanel.REQUEST_LOCATION && roadSpeedPanel!=null){
-            roadSpeedPanel.permissionResult(result);
+        if(code==RoadSpeedPanel.REQUEST_LOCATION){
+            if(roadSpeedPanel!=null)roadSpeedPanel.permissionResult(result);
+            if(permissionFlowActive)requestNotificationsAtStart();
+        }else if(code==303){
+            if(permissionFlowActive){
+                enableNewInstallFlightAlerts();
+                finishStartupPermissions();
+            }else if(notificationsGranted()){
+                enableFlightAlerts();
+            }else if(status!=null){
+                status.setText("Notificaciones pendientes · revisá permisos de Android");
+            }
         }
     }
 
@@ -1085,6 +1190,10 @@ public final class MainActivity extends Activity {
         foreground = true;
         applyKeepScreenAwake();
         if(roadSpeedPanel!=null)roadSpeedPanel.resume();
+        // Request missing runtime permissions once per foreground session,
+        // after the interface exists. The GPS starts automatically on grant.
+        if(!permissionsCheckedThisForeground && !permissionFlowActive)
+            handler.postDelayed(this::beginStartupPermissions,300L);
         if(!alertReceiverRegistered){
             IntentFilter filter=new IntentFilter(FlightAlertReceiver.ACTION_UI);
             if(Build.VERSION.SDK_INT>=33)
@@ -1104,6 +1213,7 @@ public final class MainActivity extends Activity {
         foreground = false;
         applyKeepScreenAwake();
         if(roadSpeedPanel!=null)roadSpeedPanel.pause();
+        if(!permissionFlowActive)permissionsCheckedThisForeground=false;
         if(alertReceiverRegistered){
             try{unregisterReceiver(foregroundAlertReceiver);}catch(Exception ignored){}
             alertReceiverRegistered=false;
