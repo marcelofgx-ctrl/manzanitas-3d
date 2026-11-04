@@ -31,9 +31,9 @@ public final class OfflineTilePolicyTest {
         assertNotEquals(key,OfflineTilePolicy.key(lat+1,lon));
     }
     @Test public void boundaryChangesCellWithoutGuessingLimit(){
-        assertEquals(-3490,OfflineTilePolicy.cell(-34.9000001));
+        assertEquals(-3491,OfflineTilePolicy.cell(-34.9000001));
         assertEquals(-3490,OfflineTilePolicy.cell(-34.9000));
-        assertEquals(-3489,OfflineTilePolicy.cell(-34.8999999));
+        assertEquals(-3490,OfflineTilePolicy.cell(-34.8999999));
         assertFalse(OfflineTilePolicy.withinSafeLoadedMargin(
             -3490,-5615,-34.895,-56.13));
     }
