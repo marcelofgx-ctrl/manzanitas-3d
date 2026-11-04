@@ -61,27 +61,23 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         setBackgroundColor(0xFFF7FAFC);
         setPadding(dp(11),dp(8),dp(11),dp(6));
 
-        // Subtle pill centered above the two readings, not over the GPS button.
-        // 28dp high (less than half the height of the speedometer tiles).
+        // Street capsule covers the full width of the two speed reading cards,
+        // aligned with their left edge and ending before the 70dp GPS control column.
+        // Single-line left-aligned name, no centered badge or artificial max width.
         LinearLayout streetLine=new LinearLayout(a);
         streetLine.setGravity(Gravity.CENTER_VERTICAL);
-        FrameLayout streetArea=new FrameLayout(a);
-        streetValue=text("Activá GPS",14,NAVY,false);
+        streetValue=text("Activá GPS",15,NAVY,false);
         streetValue.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        streetValue.setLetterSpacing(0.005f);
+        streetValue.setLetterSpacing(0.003f);
         streetValue.setSingleLine(true);
         streetValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        streetValue.setGravity(Gravity.CENTER);
-        streetValue.setMinWidth(dp(128));
-        streetValue.setMaxWidth(dp(275));
-        streetValue.setPadding(dp(12),dp(2),dp(12),dp(2));
+        streetValue.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        streetValue.setPadding(dp(14),0,dp(12),0);
         streetValue.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
-        FrameLayout.LayoutParams pillParams=new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,dp(34),Gravity.CENTER);
-        streetArea.addView(streetValue,pillParams);
-        streetLine.addView(streetArea,new LinearLayout.LayoutParams(
-            0,dp(34),1f));
-        // The 70dp spacer lines the badge up between velocity and limit.
+        LinearLayout.LayoutParams streetPillParams=new LinearLayout.LayoutParams(
+            0,dp(34),1f);
+        streetPillParams.rightMargin=dp(7);
+        streetLine.addView(streetValue,streetPillParams);
         streetLine.addView(new View(a),new LinearLayout.LayoutParams(dp(70),dp(1)));
         LinearLayout.LayoutParams streetParams=new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,dp(34));
