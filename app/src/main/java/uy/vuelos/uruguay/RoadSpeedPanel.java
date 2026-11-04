@@ -169,7 +169,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
 
         LinearLayout footer=new LinearLayout(a);
         footer.setGravity(Gravity.CENTER_VERTICAL);
-        footer.setPadding(dp(2),dp(5),dp(2),0);
+        footer.setPadding(dp(2),dp(2),dp(2),0);
         stateValue=text("GPS apagado · tocá GPS para activar",10,MUTED,false);
         stateValue.setSingleLine(true);
         stateValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -425,6 +425,12 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             stateValue.setText(roadStatus);
             stateValue.setTextColor(MUTED);
         }
+        // Solo presentación: ocultar el renglón que repite la calle/límite
+        // cuando tenemos un límite identificado. Las alertas de exceso,
+        // errores y tramos sin datos siguen visibles y funcionando igual.
+        boolean duplicateMappedCaption=currentLimit>0 &&
+            (visual==SpeedColorPolicy.NORMAL || visual==SpeedColorPolicy.UNKNOWN);
+        stateValue.setVisibility(duplicateMappedCaption?View.GONE:View.VISIBLE);
         String limitDescription=currentLimit>0 ? currentLimit+" kilómetros por hora registrados":
             "límite no disponible. Tocá el panel para saber por qué";
         speedTile.setContentDescription("Velocidad actual GPS: "+
