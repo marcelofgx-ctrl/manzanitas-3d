@@ -49,6 +49,24 @@ public final class OfflineRoadLookup {
         try { if(zip!=null)zip.close(); }catch(Exception ignored){}
         zip=null;
     }
+    private static double usableBearing(Location fix){
+        // Heading can help distinguish crossing avenues, never parallel streets.
+        // Ignore stationary/slow fixes and compass readings with high uncertainty.
+        if(fix==null||!fix.hasSpeed()||fix.getSpeed()<5f||!fix.hasBearing())
+            return Double.NaN;
+        if(android.os.Build.VERSION.SDK_INT>=26 &&
+           (!fix.hasBearingAccuracy()||fix.getBearingAccuracyDegrees()>25f))
+            return Double.NaN;
+        return fix.getBearing();
+    }
+
+    private static RoadSpeedMatcher.Match match(List<RoadSpeedMatcher.Road> roads,
+                                                 Location fix){
+        return RoadSpeedMatcher.nearest(roads,fix.getLatitude(),fix.getLongitude(),
+            fix.hasAccuracy()?fix.getAccuracy():Float.POSITIVE_INFINITY,
+            usableBearing(fix));
+    }
+
     private static String explain(RoadSpeedMatcher.Match m){
         if(m.confident)return m.name.isEmpty()?"Límite de OSM offline":
             "Límite OSM offline · "+m.name;
@@ -78,7 +96,7 @@ public final class OfflineRoadLookup {
         }
         int a=(int)Math.floor(lat*100.0),b=(int)Math.floor(lon*100.0);
         if(a==loadedLat&&b==loadedLon){
-            RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(cached,lat,lon,acc);
+            RoadSpeedMatcher.Match match=match(cached,position);
             callback.onLimit(match,explain(match));
             return;
         }
@@ -115,9 +133,7 @@ public final class OfflineRoadLookup {
                     callback.onLimit(RoadSpeedMatcher.Match.unavailable(),error);
                     return;
                 }
-                RoadSpeedMatcher.Match match=RoadSpeedMatcher.nearest(cached,
-                    current.getLatitude(),current.getLongitude(),
-                    current.hasAccuracy()?current.getAccuracy():Float.POSITIVE_INFINITY);
+                RoadSpeedMatcher.Match match=match(cached,current);
                 callback.onLimit(match,explain(match));
             });
         });
