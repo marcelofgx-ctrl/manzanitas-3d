@@ -34,7 +34,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     public static final int REQUEST_LOCATION=407;
     private static final int NAVY=0xFF142C40, MUTED=0xFF718597, MINT=0xFFCCF4E5;
     private final Activity activity;
-    private final SpeedLimitLookup lookup=new SpeedLimitLookup();
+    private final OfflineRoadLookup lookup;
     private final StreetNameLookup streetLookup;
     private LocationManager locationManager;
     private final TextView speedValue, limitValue, stateValue, gpsToggle, warningToggle;
@@ -50,6 +50,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     public RoadSpeedPanel(Activity a){
         super(a);
         activity=a;
+        lookup=new OfflineRoadLookup(a);
         streetLookup=new StreetNameLookup(a);
         enabled=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedEnabled",false);
         warnings=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedWarning",false);
@@ -124,7 +125,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         limitTile.setBackground(pill(Color.WHITE,0xFFE1EAF0));
         limitTile.setOnClickListener(v->new AlertDialog.Builder(activity)
             .setTitle("Límite de velocidad del tramo")
-            .setMessage((currentLimit>0?currentLimit+" km/h · valor registrado en OpenStreetMap":
+            .setMessage((currentLimit>0?currentLimit+" km/h · dato OSM guardado en la APK":
                 "Dato no disponible")+"\n\n"+roadStatus+
                 "\n\nLa aplicación solo muestra un número si puede identificar el tramo y un límite registrado para esa calle. No reemplaza las señales reales.")
             .setPositiveButton("Entendido",(d,w)->{})
@@ -214,7 +215,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         new AlertDialog.Builder(activity)
             .setTitle("Velocímetro en Vuelos Uruguay")
             .setMessage("Para mostrar tu velocidad usamos el GPS solo mientras Vuelos Uruguay está abierto.\n\n"+
-                "Para mostrar la calle cercana también usamos el geocodificador de Android, que puede consultar servicios de red. Para el límite se envía tu posición a OpenStreetMap. No guardamos recorridos ni pedimos ubicación en segundo plano.\n\n"+
+                "Para mostrar la calle cercana también usamos el geocodificador de Android, que puede consultar servicios de red. El límite se consulta en una base local dentro de la APK, sin enviar tu posición a OpenStreetMap. No guardamos recorridos ni pedimos ubicación en segundo plano.\n\n"+
                 "Los límites pueden faltar o estar desactualizados: siempre tienen prioridad las señales de tránsito.")
             .setNegativeButton("Cancelar",(d,w)->{})
             .setPositiveButton("Activar GPS",(d,w)->{
@@ -333,7 +334,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             limitValue.setText(match.confident?String.valueOf(match.limitKmh):"N/D");
             roadStatus=match.confident
                 ?(match.name.isEmpty()?"Límite cartográfico · señal prevalece":
-                    match.name+" · límite cartográfico")
+                    match.name+" · límite local OSM")
                 :state+" · límite no disponible";
             updateWarning();
         });
