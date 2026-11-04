@@ -4,6 +4,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -99,40 +102,119 @@ public final class RoadSpeedMatcher {
         return roads;
     }
 
-    /** Do not pick a tagged street just because the true nearest street is untagged.
-     * GPS errors >25m, distant streets and parallel roads with different values are unknown.
+    /** Keep separate OSM ways separate, but combine their many component segments
+     * before determining whether another STREET truly creates ambiguity.
+     * Calling every segment a separate road causes false N/D next to intersections.
      */
+    private static final class Candidate {
+        final Road road;
+        final double distance;
+        final double alignmentDegrees;
+        Candidate(Road r,double distance,double alignment){
+            this.road=r;this.distance=distance;this.alignmentDegrees=alignment;
+        }
+    }
+
     public static Match nearest(List<Road> roads,double lat,double lon,float accuracy){
-        if(roads==null || !Double.isFinite(lat) || !Double.isFinite(lon)
-            || accuracy<=0 || accuracy>25)
+        return nearest(roads,lat,lon,accuracy,Double.NaN);
+    }
+
+    /** With an accurate moving GPS bearing, a crossing street can be rejected by
+     * its perpendicular orientation; parallel roads remain ambiguous.
+     * headingDegrees is NaN when stationary, unavailable, or too imprecise.
+     */
+    public static Match nearest(List<Road> roads,double lat,double lon,float accuracy,
+                                double headingDegrees){
+        if(roads==null||!Double.isFinite(lat)||!Double.isFinite(lon)||
+            accuracy<=0||accuracy>25)
             return new Match(0,"",Double.POSITIVE_INFINITY,false,GPS_INACCURATE);
-        Road bestRoad=null,secondRoad=null;
-        double nearest=Double.POSITIVE_INFINITY,second=Double.POSITIVE_INFINITY;
-        for(Road road:roads){
+        Map<Long,Candidate> byWay=new HashMap<>();
+        ArrayList<Candidate> distinct=new ArrayList<>();
+        boolean hasHeading=Double.isFinite(headingDegrees);
+        for(int index=0;index<roads.size();index++){
+            Road road=roads.get(index);
             if(road.geometry==null||road.geometry.length<2)continue;
-            double min=Double.POSITIVE_INFINITY;
+            double closest=Double.POSITIVE_INFINITY;
+            double alignment=90;
             for(int j=1;j<road.geometry.length;j++){
-                min=Math.min(min,distanceToSegment(lat,lon,
-                    road.geometry[j-1][0],road.geometry[j-1][1],
-                    road.geometry[j][0],road.geometry[j][1]));
+                double[] p=road.geometry[j-1],q=road.geometry[j];
+                double distance=distanceToSegment(lat,lon,p[0],p[1],q[0],q[1]);
+                if(distance<closest){
+                    closest=distance;
+                    alignment=hasHeading?
+                        axisMisalignment(p[0],p[1],q[0],q[1],headingDegrees):90;
+                }
             }
-            if(min<nearest){
-                secondRoad=bestRoad;second=nearest;
-                bestRoad=road;nearest=min;
-            }else if(min<second){
-                secondRoad=road;second=min;
+            Candidate c=new Candidate(road,closest,alignment);
+            if(road.id<=0){
+                distinct.add(c);
+            }else{
+                Candidate old=byWay.get(road.id);
+                if(old==null||c.distance<old.distance)byWay.put(road.id,c);
             }
         }
+        distinct.addAll(byWay.values());
+        distinct.sort(Comparator.comparingDouble(c->c.distance));
         double maxDistance=Math.max(22,Math.min(30,12+accuracy));
-        if(bestRoad==null||nearest>maxDistance)
-            return new Match(0,"",nearest,false,NO_ROAD);
-        if(secondRoad!=null && second<30 &&
-            second-nearest<Math.max(8,accuracy*0.8) &&
-            secondRoad.maxKmh!=bestRoad.maxKmh)
-            return new Match(0,bestRoad.name,nearest,false,AMBIGUOUS);
-        if(bestRoad.maxKmh==0)
-            return new Match(0,bestRoad.name,nearest,false,NO_LIMIT);
-        return new Match(bestRoad.maxKmh,bestRoad.name,nearest,true,VERIFIED);
+        if(distinct.isEmpty()||distinct.get(0).distance>maxDistance)
+            return new Match(0,"",Double.POSITIVE_INFINITY,false,NO_ROAD);
+
+        Candidate best=distinct.get(0);
+        double ambiguousRange=Math.max(8,accuracy*0.8);
+        List<Candidate> competitors=new ArrayList<>();
+        for(Candidate candidate:distinct){
+            if(candidate.distance>30||candidate.distance-best.distance>=ambiguousRange)
+                break;
+            competitors.add(candidate);
+        }
+
+        boolean hasConflict=false;
+        for(Candidate other:competitors){
+            if(other.road.maxKmh!=best.road.maxKmh){
+                hasConflict=true;
+                break;
+            }
+        }
+        if(hasConflict && hasHeading && accuracy<=15){
+            // A distinct road is selected only when its direction closely matches
+            // moving GPS and EVERY road with a different limit is nearly crosswise.
+            // This NEVER disambiguates parallel carriageways sharing the same heading.
+            Candidate directionWinner=null;
+            for(Candidate c:competitors){
+                if(c.alignmentDegrees>20||c.distance>maxDistance)continue;
+                boolean allOtherLimitsClearlyCrosswise=true;
+                for(Candidate other:competitors){
+                    if(other.road.maxKmh!=c.road.maxKmh &&
+                       other.alignmentDegrees<55){
+                        allOtherLimitsClearlyCrosswise=false;
+                        break;
+                    }
+                }
+                if(allOtherLimitsClearlyCrosswise){
+                    if(directionWinner==null||c.distance<directionWinner.distance)
+                        directionWinner=c;
+                }
+            }
+            if(directionWinner!=null)best=directionWinner;
+            else return new Match(0,best.road.name,best.distance,false,AMBIGUOUS);
+        }else if(hasConflict){
+            return new Match(0,best.road.name,best.distance,false,AMBIGUOUS);
+        }
+        if(best.road.maxKmh==0)
+            return new Match(0,best.road.name,best.distance,false,NO_LIMIT);
+        return new Match(best.road.maxKmh,best.road.name,best.distance,true,VERIFIED);
+    }
+
+    private static double axisMisalignment(double lat1,double lon1,
+                                            double lat2,double lon2,double heading){
+        // Bearing modulo 180°: road geometry is allowed in both directions.
+        double north=lat2-lat1;
+        double east=(lon2-lon1)*Math.cos(Math.toRadians((lat1+lat2)*0.5));
+        if(Math.hypot(north,east)<0.000005)return 90;
+        double axis=(Math.toDegrees(Math.atan2(east,north))+360)%180;
+        double course=((heading%180)+180)%180;
+        double difference=Math.abs(axis-course);
+        return Math.min(difference,180-difference);
     }
 
     private static double distanceToSegment(double lat,double lon,
