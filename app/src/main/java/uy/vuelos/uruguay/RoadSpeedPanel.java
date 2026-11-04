@@ -72,6 +72,8 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         streetValue.setSingleLine(true);
         streetValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
         streetValue.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
+        // Visual only: anchor the label text at the beginning of the capsule.
+        streetValue.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
         streetValue.setPadding(dp(14),0,dp(12),0);
         streetValue.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
         LinearLayout.LayoutParams streetPillParams=new LinearLayout.LayoutParams(
