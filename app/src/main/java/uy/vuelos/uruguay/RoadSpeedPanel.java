@@ -37,15 +37,18 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
     private final OfflineRoadLookup lookup;
     private final StreetNameLookup streetLookup;
     private LocationManager locationManager;
-    private final TextView speedValue, limitValue, stateValue, gpsToggle, warningToggle;
-    private LinearLayout speedTile, limitTile;
-    private TextView speedCaption, limitCaption, streetValue;
+    private final TextView speedValue, limitValue, stateValue;
+    private LinearLayout speedTile, limitTile, details, capsuleHeader;
+    private TextView speedCaption, limitCaption, streetValue, streetSummary, chevron;
+    private boolean expanded=false;
     private String nearbyStreet="", mapStreet="";
     private String lastVisibleStreet="";
     private long lastStreetConfirmedMs=0L;
     private Location lastStreetFix, lastSpeedFix;
     private String roadStatus = "Límite no disponible";
-    private boolean resumed=false, tracking=false, enabled, warnings;
+    private boolean resumed=false, tracking=false, enabled;
+    // Excess-speed vibration remains active, with no separate GPS/VIB toggles.
+    private final boolean warnings=true;
     private boolean hasUsableSpeed=false;
     private int currentKmh=-1, currentLimit=0;
     private long overSince=0L, lastVibrate=0L;
@@ -55,37 +58,43 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         activity=a;
         lookup=new OfflineRoadLookup(a);
         streetLookup=new StreetNameLookup(a);
-        enabled=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedEnabled",false);
-        warnings=a.getPreferences(Context.MODE_PRIVATE).getBoolean("roadSpeedWarning",false);
+        enabled=hasPermission();
         setOrientation(VERTICAL);
         setBackgroundColor(0xFFF7FAFC);
-        setPadding(dp(11),dp(8),dp(11),dp(6));
+        setPadding(dp(11),dp(5),dp(11),dp(5));
 
-        // Street capsule covers the full width of the two speed reading cards,
-        // aligned with their left edge and ending before the 70dp GPS control column.
-        // Single-line left-aligned name, no centered badge or artificial max width.
-        LinearLayout streetLine=new LinearLayout(a);
-        streetLine.setGravity(Gravity.CENTER_VERTICAL);
-        streetValue=text("Activá GPS",15,NAVY,false);
+        // One compact header is always visible; tap to expand the existing
+        // speed, road-limit and attribution details. No GPS/VIB switches.
+        capsuleHeader=new LinearLayout(a);
+        capsuleHeader.setGravity(Gravity.CENTER_VERTICAL);
+        capsuleHeader.setPadding(dp(11),dp(7),dp(9),dp(7));
+        capsuleHeader.setMinimumHeight(dp(44));
+        capsuleHeader.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
+        streetValue=text("Buscando calle…",15,NAVY,false);
         streetValue.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        streetValue.setLetterSpacing(0.003f);
         streetValue.setSingleLine(true);
         streetValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
         streetValue.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
-        // Visual only: anchor the label text at the beginning of the capsule.
         streetValue.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-        streetValue.setPadding(dp(14),0,dp(12),0);
-        streetValue.setBackground(pill(0xFFF0F5F8,0xFFDCE7ED));
-        LinearLayout.LayoutParams streetPillParams=new LinearLayout.LayoutParams(
-            0,dp(34),1f);
-        streetPillParams.rightMargin=dp(7);
-        streetLine.addView(streetValue,streetPillParams);
-        streetLine.addView(new View(a),new LinearLayout.LayoutParams(dp(70),dp(1)));
-        LinearLayout.LayoutParams streetParams=new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,dp(34));
-        streetParams.bottomMargin=dp(5);
-        addView(streetLine,streetParams);
+        capsuleHeader.addView(streetValue,new LinearLayout.LayoutParams(
+            0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        streetSummary=text("— / —",13,NAVY,true);
+        streetSummary.setSingleLine(true);
+        streetSummary.setPadding(dp(8),0,dp(5),0);
+        streetSummary.setContentDescription("Velocidad GPS y límite cartográfico en kilómetros por hora");
+        capsuleHeader.addView(streetSummary);
+        chevron=text("⌄",23,0xFF538399,true);
+        chevron.setGravity(Gravity.CENTER);
+        capsuleHeader.addView(chevron,new LinearLayout.LayoutParams(dp(24),dp(30)));
+        capsuleHeader.setClickable(true);
+        capsuleHeader.setFocusable(true);
+        capsuleHeader.setOnClickListener(v->setExpanded(!expanded));
+        addView(capsuleHeader,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        details=new LinearLayout(a);
+        details.setOrientation(VERTICAL);
+        details.setPadding(0,dp(5),0,0);
         // Phone-width layout: two large readings and one narrow control column.
         LinearLayout meters=new LinearLayout(a);
         meters.setGravity(Gravity.CENTER_VERTICAL);
@@ -139,38 +148,13 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         lp.rightMargin=dp(7);
         meters.addView(limitTile,lp);
 
-        LinearLayout options=new LinearLayout(a);
-        options.setOrientation(VERTICAL);
-        options.setGravity(Gravity.CENTER);
-        gpsToggle=text("",10,NAVY,true);
-        gpsToggle.setGravity(Gravity.CENTER);
-        gpsToggle.setMinHeight(dp(36));
-        gpsToggle.setPadding(dp(5),dp(5),dp(5),dp(5));
-        gpsToggle.setOnClickListener(v->toggleGPS());
-        options.addView(gpsToggle,new LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        warningToggle=text("",9,MUTED,true);
-        warningToggle.setGravity(Gravity.CENTER);
-        warningToggle.setMinHeight(dp(29));
-        warningToggle.setPadding(dp(3),dp(4),dp(3),dp(4));
-        warningToggle.setOnClickListener(v->{
-            warnings=!warnings;
-            activity.getPreferences(Context.MODE_PRIVATE).edit()
-                .putBoolean("roadSpeedWarning",warnings).apply();
-            overSince=0;
-            renderToggle();
-        });
-        options.addView(warningToggle,new LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-        meters.addView(options,new LinearLayout.LayoutParams(dp(70),
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        addView(meters);
-
+        // Both tiles take the whole available width when expanded.
+        lp.rightMargin=0;
+        details.addView(meters);
         LinearLayout footer=new LinearLayout(a);
         footer.setGravity(Gravity.CENTER_VERTICAL);
         footer.setPadding(dp(2),dp(2),dp(2),0);
-        stateValue=text("GPS apagado · tocá GPS para activar",10,MUTED,false);
+        stateValue=text("Esperando permiso de ubicación",10,MUTED,false);
         stateValue.setSingleLine(true);
         stateValue.setEllipsize(android.text.TextUtils.TruncateAt.END);
         footer.addView(stateValue,new LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
@@ -183,8 +167,10 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             catch(Exception ignored){}
         });
         footer.addView(credit);
-        addView(footer);
-        renderToggle();
+        details.addView(footer);
+        addView(details,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        setExpanded(false);
         renderSpeedColors();
     }
 
@@ -206,53 +192,27 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         return activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
             ==PackageManager.PERMISSION_GRANTED;
     }
-    private void toggleGPS(){
-        if(enabled){
-            enabled=false;
-            activity.getPreferences(Context.MODE_PRIVATE).edit()
-                .putBoolean("roadSpeedEnabled",false).apply();
-            stop();
-            renderToggle();
-            return;
-        }
-        new AlertDialog.Builder(activity)
-            .setTitle("Velocímetro en Vuelos Uruguay")
-            .setMessage("Para mostrar tu velocidad usamos el GPS solo mientras Vuelos Uruguay está abierto.\n\n"+
-                "Para mostrar la calle cercana también usamos el geocodificador de Android, que puede consultar servicios de red. El límite se consulta en una base local dentro de la APK, sin enviar tu posición a OpenStreetMap. No guardamos recorridos ni pedimos ubicación en segundo plano.\n\n"+
-                "Los límites pueden faltar o estar desactualizados: siempre tienen prioridad las señales de tránsito.")
-            .setNegativeButton("Cancelar",(d,w)->{})
-            .setPositiveButton("Activar GPS",(d,w)->{
-                if(!hasPermission()){
-                    activity.requestPermissions(new String[]{
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION},REQUEST_LOCATION);
-                }else enableAndStart();
-            }).show();
-    }
-
-    private void enableAndStart(){
-        if(!hasPermission()){
-            stateValue.setText("Se requiere ubicación precisa para identificar la calle.");
-            return;
-        }
-        enabled=true;
-        activity.getPreferences(Context.MODE_PRIVATE).edit().putBoolean("roadSpeedEnabled",true).apply();
-        renderToggle();
-        if(resumed)start();
-    }
-
     public void permissionResult(int[] grants){
-        if(hasPermission())enableAndStart();
-        else {
-            enabled=false;
-            renderToggle();
-            stateValue.setText("Ubicación no autorizada · GPS apagado");
+        // Called by startup permission onboarding, not by an in-app switch.
+        enabled=hasPermission();
+        if(enabled){
+            if(resumed)start();
+        }else{
+            stop();
+            roadStatus="Ubicación precisa pendiente · habilitala en permisos";
+            renderStreetName();
+            renderSpeedColors();
         }
     }
     public void resume(){
         resumed=true;
-        if(enabled && hasPermission())start();
-        else if(enabled)stateValue.setText("Activá ubicación precisa en permisos de Android");
+        enabled=hasPermission();
+        if(enabled)start();
+        else {
+            roadStatus="Ubicación precisa pendiente · habilitala en permisos";
+            renderStreetName();
+            renderSpeedColors();
+        }
     }
     public void pause(){
         resumed=false;
@@ -307,7 +267,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         overSince=0;
         speedValue.setText("—");
         limitValue.setText("—");
-        roadStatus=enabled?"GPS en pausa":"GPS apagado · tocá GPS para activar";
+        roadStatus=enabled?"GPS en pausa":"Permiso de ubicación pendiente";
         renderSpeedColors();
     }
     @Override public void onLocationChanged(Location location){
@@ -364,7 +324,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         if(streetValue==null)return;
         String name="";
         if(!enabled){
-            name="Activá GPS";
+            name="Ubicación pendiente";
         }else if(!tracking){
             name="Esperando GPS…";
         }else{
@@ -387,8 +347,29 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
             }
         }
         streetValue.setText(name);
+        renderSummary();
         streetValue.setContentDescription("Nombre aproximado de la calle: "+name+
             ". El límite se comprueba por separado con el mapa local.");
+    }
+
+    private void setExpanded(boolean expand){
+        expanded=expand;
+        if(details!=null)details.setVisibility(expand?View.VISIBLE:View.GONE);
+        if(chevron!=null)chevron.setText(expand?"⌃":"⌄");
+        if(capsuleHeader!=null)
+            capsuleHeader.setContentDescription((streetValue==null?"Calle":
+                String.valueOf(streetValue.getText()))+
+                ". Velocidad y límite en kilómetros por hora. Tocá para "+
+                (expand?"contraer":"expandir")+" el velocímetro");
+    }
+    private void renderSummary(){
+        if(streetSummary==null)return;
+        String speed=currentKmh>=0?String.valueOf(currentKmh):"—";
+        String limit=currentLimit>0?String.valueOf(currentLimit):"—";
+        streetSummary.setText(speed+" / "+limit);
+        streetSummary.setContentDescription("Velocidad GPS "+speed+
+            " kilómetros por hora; límite cartográfico "+limit+
+            " kilómetros por hora");
     }
 
     private void renderSpeedColors(){
@@ -413,6 +394,9 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         limitValue.setTextColor(visual==SpeedColorPolicy.RED?0xFFBB2829:NAVY);
         speedCaption.setTextColor(captionInk);
         limitCaption.setTextColor(visual==SpeedColorPolicy.RED?0xFFBB2829:MUTED);
+        streetSummary.setTextColor(visual==SpeedColorPolicy.RED?0xFFBB2829:
+            visual==SpeedColorPolicy.AMBER?0xFF96631F:NAVY);
+        renderSummary();
         if(visual==SpeedColorPolicy.RED){
             stateValue.setText("EXCESO +"+SpeedColorPolicy.excess(currentKmh,currentLimit)+
                 " km/h · límite cartográfico orientativo");
@@ -470,16 +454,5 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         overSince=0L;
         renderSpeedColors();
     }
-    private void renderToggle(){
-        gpsToggle.setText(enabled?"● GPS ON":"○ GPS OFF");
-        gpsToggle.setTextColor(enabled?0xFF117657:NAVY);
-        gpsToggle.setBackground(pill(enabled?MINT:0xFFE6EDF2,0));
-        gpsToggle.setContentDescription(enabled?"Desactivar GPS":"Activar GPS para conocer tu velocidad y consultar el límite de calle");
-        warningToggle.setText(warnings?"VIB. ON":"VIB. OFF");
-        warningToggle.setTextColor(warnings?0xFF9E641B:MUTED);
-        warningToggle.setBackground(pill(warnings?0xFFFFF1DF:0xFFF4F7FA,0));
-        warningToggle.setContentDescription(warnings?
-            "Desactivar vibración al superar el límite cartográfico en 7 kilómetros por hora durante cinco segundos":
-            "Activar vibración opcional de exceso: siete kilómetros por hora sobre el límite cartográfico durante cinco segundos");
-    }
+
 }
