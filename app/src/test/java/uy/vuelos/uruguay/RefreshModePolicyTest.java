@@ -13,8 +13,15 @@ public class RefreshModePolicyTest {
     @Test public void unknownDateStillPreservedByManualLock() {
         assertFalse(RefreshModePolicy.shouldReload(true,true,true,false));
     }
-    @Test public void detectedFutureDateAlsoStopsAuto() {
-        assertFalse(RefreshModePolicy.shouldReload(true,true,false,true));
+    @Test public void providerNextDayCannotStopLiveRefresh() {
+        assertTrue(RefreshModePolicy.shouldReload(true,true,false,true));
+    }
+    @Test public void explicitManualTomorrowStillPausesAuto() {
+        assertFalse(RefreshModePolicy.shouldReload(true,true,true,true));
+    }
+    @Test public void providerDateOnlyChangesSourceMetadataNotControlPolicy() {
+        assertEquals(RefreshModePolicy.shouldReload(true,true,false,false),
+                     RefreshModePolicy.shouldReload(true,true,false,true));
     }
     @Test public void pauseAppAndUserDisabledAutoStopRefresh() {
         assertFalse(RefreshModePolicy.shouldReload(false,true,false,false));

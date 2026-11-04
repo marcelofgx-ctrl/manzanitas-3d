@@ -455,7 +455,7 @@ public final class MainActivity extends Activity {
                     lastLoadedElapsed = SystemClock.elapsedRealtime();
                     lastUpdate.setText("Consultado " + localClock());
                     status.setText("Consultando vuelos · horarios orientativos");
-                    if(mode == 0) {
+                    if(mode == 0 && !manualBrowsing) {
                         final int token=++readToken;
                         handler.postDelayed(() -> extractFlights(token,0),950);
                         handler.postDelayed(() -> extractFlights(token,1),2900);
@@ -727,6 +727,8 @@ public final class MainActivity extends Activity {
 
     private void renderModeTabs(){
         if(liveModeTab==null||manualModeTab==null)return;
+        liveModeTab.setText(!manualBrowsing && viewingOtherDate
+            ? "●  AHORA · EN VIVO" : "●  HOY · EN VIVO");
         liveModeTab.setTextColor(manualBrowsing?SECONDARY:NAVY);
         manualModeTab.setTextColor(manualBrowsing?NAVY:SECONDARY);
         liveModeTab.setBackground(rounded(manualBrowsing?0xFFF0F3F5:0xFFB6F1DE,13,0,0));
@@ -760,10 +762,12 @@ public final class MainActivity extends Activity {
 
     private void returnToLive(){
         if(mode!=0){selectMode(0);return;}
-        if(!manualBrowsing){
+        if(!manualBrowsing && !viewingOtherDate){
             if(priorityVisible&&driverBoard!=null) driverBoard.smoothScrollTo(0,0);
             return;
         }
+        // Returning to live must be possible even when the public provider
+        // has automatically advanced its displayed board to tomorrow.
         manualBrowsing=false;
         viewingOtherDate=false;
         futureRequestId++;
@@ -792,9 +796,9 @@ public final class MainActivity extends Activity {
     }
 
     private void extractFlights(int token, int attempt) {
-        if (token != readToken || mode!=0 || panel==null || errorActive) return;
+        if (token != readToken || mode!=0 || panel==null || errorActive || manualBrowsing) return;
         panel.evaluateJavascript(FlightData.EXTRACT_JS, payload -> {
-            if (token!=readToken || mode!=0 || errorActive) return;
+            if (token!=readToken || mode!=0 || errorActive || manualBrowsing) return;
             long now=System.currentTimeMillis();
             FlightData.BoardSnapshot board=FlightData.parseBoardJs(payload,now);
             LocalDate today=Instant.ofEpochMilli(now).atZone(FlightData.UY).toLocalDate();
@@ -811,25 +815,29 @@ public final class MainActivity extends Activity {
                       SystemClock.elapsedRealtime(),lastDriverInteraction) && driverBoard!=null){
                     driverBoard.post(() -> { if(!manualBrowsing)driverBoard.smoothScrollTo(0,0); });
                 }
-                // The source's date may change when a user selects tomorrow. Keep it visible.
+                // Avionio may switch to the next day's arrivals late at night.
+                // This is SOURCE DATA, not a request by the user to enter manual mode.
+                // Keep automatic live updates and identify the date honestly.
                 if(viewingOtherDate){
-                    subheading.setText("Consulta: "+DateTimeFormatter.ofPattern("d MMM yyyy",new Locale("es","UY")).format(board.selectedDate));
+                    String shownDate=DateTimeFormatter.ofPattern("d MMM yyyy",
+                        new Locale("es","UY")).format(board.selectedDate);
+                    subheading.setText("Fuente en vivo · llegadas del "+shownDate);
+                    if(sourceWarning!=null && !board.sourceEmpty){
+                        sourceWarning.setText("La fuente en vivo muestra "+shownDate+
+                            ", no la jornada de hoy. No confirma ausencia de vuelos de hoy. Comprobar Carrasco oficial ↗");
+                        sourceWarning.setVisibility(View.VISIBLE);
+                    }
                 }else subheading.setText("Horarios y estado de los vuelos");
-                if(viewingOtherDate && !manualBrowsing){
-                    // Source may open tomorrow by default. Preserve the just-read rows.
-                    manualBrowsing=true;
-                    handler.removeCallbacks(refreshTask);
-                    renderModeTabs();
-                }
-                if(!manualBrowsing) displayPriority(true);
-                else displayPriority(false);
+                renderModeTabs();
+                // Only explicit tapping on CONSULTAR FECHA may set manualBrowsing=true.
+                displayPriority(true);
                 renderAuto();
                 scheduleAutoRefresh();
                 if(board.sourceEmpty){
                     status.setText("Sin registros en la fuente · no confirma ausencia de vuelos");
                     // Do not cancel earlier alerts when the user browses a future date.
                 }else if(viewingOtherDate){
-                    status.setText(flights.size()+" arribos de la fecha consultada · alertas solo para hoy");
+                    status.setText(flights.size()+" próximos arribos según fuente · fecha distinta de hoy · sin nuevas alertas");
                 }else if(FlightAlerts.enabled(this)){
                     FlightAlerts.observeConfirmedLandings(this,flights,now);
                     int scheduled=FlightAlerts.schedule(this,flights,now);
@@ -1028,7 +1036,7 @@ public final class MainActivity extends Activity {
 
     private void renderAuto() {
         if (autoSwitch == null) return;
-        autoSwitch.setText(manualBrowsing?"◷ MANUAL FIJO":viewingOtherDate&&autoRefresh?"● AUTO PAUSA":autoRefresh?"● AUTO 3 MIN":"○ AUTO OFF");
+        autoSwitch.setText(manualBrowsing?"◷ MANUAL FIJO":autoRefresh?"● AUTO 3 MIN":"○ AUTO OFF");
         autoSwitch.setTextColor(autoRefresh ? 0xFF137961 : SECONDARY);
         autoSwitch.setBackground(rounded(autoRefresh ? 0xFFE0F9EF : 0xFFE8EDF1, 16, 0, 0));
         autoSwitch.setContentDescription(manualBrowsing?"Consulta manual fija; volver a Hoy para actualizar automáticamente":autoRefresh?"Desactivar actualización cada 3 minutos":"Activar actualización cada 3 minutos");
@@ -1085,7 +1093,7 @@ public final class MainActivity extends Activity {
             alertReceiverRegistered=true;
         }
         updateClock();
-        if (panel != null && autoRefresh && !manualBrowsing && !viewingOtherDate && lastLoadedElapsed > 0L
+        if (panel != null && autoRefresh && !manualBrowsing && lastLoadedElapsed > 0L
             && SystemClock.elapsedRealtime() - lastLoadedElapsed >= REFRESH_MS) {
             panel.reload();
         }

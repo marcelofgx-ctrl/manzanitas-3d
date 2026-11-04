@@ -1,10 +1,11 @@
 package uy.vuelos.uruguay;
 
-/** Pure policy: live today can refresh and focus; manual date selection never silently reloads or jumps. */
+/** Pure policy: explicit manual date mode pauses refresh. A provider date rollover cannot. */
 public final class RefreshModePolicy {
     public static boolean shouldReload(boolean foreground, boolean autoEnabled,
                                        boolean manualMode, boolean selectedFutureDate) {
-        return foreground && autoEnabled && !manualMode && !selectedFutureDate;
+        // selectedFutureDate is provider metadata; it must never force manual mode.
+        return foreground && autoEnabled && !manualMode;
     }
 
     public static boolean shouldAutoFocus(boolean liveMode, boolean priorityVisible,
