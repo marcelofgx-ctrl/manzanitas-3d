@@ -113,9 +113,25 @@ jobs:
             firma.txt
             paquete.txt
             app/build/test-results/testDebugUnitTest/
+      - name: Register QA run ID for APK handoff
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          body="$(printf 'run_id=%s\ncommit=%s\nversion=1.22.0\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" | base64 -w0)"
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/qa-artifacts/vuelos-v122-run.txt" \
+            -f message="ci: record Vuelos Uruguay QA v1.22 build run" \
+            -f content="$body" \
+            -f branch="$GITHUB_REF_NAME"
       - name: Publish signed QA APK
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create vuelos-uruguay-conductor-v1.22.0-20261104 Vuelos-Uruguay-Conductor-v1.22.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.22.0' --notes 'QA visual v1.22: fecha única arriba, sin renglones repetidos de calle ni fecha, y lista de arribos más compacta. Sin cambios funcionales de GPS, límites, vuelos, notificaciones, Quick Trip ni producción.'
+          tag=vuelos-uruguay-conductor-v1.22.0-20261104
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" Vuelos-Uruguay-Conductor-v1.22.0.apk SHA256SUMS.txt --clobber
+          else
+            gh release create "$tag" Vuelos-Uruguay-Conductor-v1.22.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.22.0' --notes 'QA visual: fecha única arriba, espacio de vuelos compactado y subtítulos redundantes retirados; motores y alertas intactos.'
+          fi
