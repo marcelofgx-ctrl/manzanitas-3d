@@ -1,0 +1,57 @@
+name: QA audit Avenida Italia maxspeed tags and nearby corridors
+on:
+  push:
+    branches: [qa/vuelos-uruguay-speed-stability-v119-20261103]
+    paths: ['.github/workflows/qa-audit-italia.yml']
+permissions:
+  contents: read
+jobs:
+  road-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Geofabrik Uruguay OSM maxspeed tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet osmium
+          curl --fail --location --retry 3 --connect-timeout 15 --max-time 220 \
+            'https://download.geofabrik.de/south-america/uruguay-latest.osm.pbf' \
+            -o /tmp/uruguay-latest.osm.pbf
+          python3 - <<'PY'
+          import osmium,collections,unicodedata
+          def normalize(x):
+              return ''.join(c for c in unicodedata.normalize('NFD',x.casefold()) if unicodedata.category(c)!='Mn')
+          class Audit(osmium.SimpleHandler):
+              def __init__(self):
+                  super().__init__()
+                  self.limits=collections.Counter()
+                  self.examples=collections.defaultdict(list)
+                  self.ways=0
+              def way(self,w):
+                  name=w.tags.get('name','')
+                  norm=normalize(name)
+                  if 'italia' not in norm or not ('avenida' in norm or 'av.' in norm or 'av ' in norm):
+                      return
+                  self.ways+=1
+                  limit=w.tags.get('maxspeed','<missing>')
+                  self.limits[limit]+=1
+                  if len(self.examples[limit])<5:
+                      try:
+                          coords=[(round(n.lat,5),round(n.lon,5)) for n in w.nodes if n.location.valid()]
+                      except Exception:
+                          coords=[]
+                      self.examples[limit].append({
+                          'way_id':w.id,'name':name,'highway':w.tags.get('highway',''),
+                          'oneway':w.tags.get('oneway',''),'maxspeed:forward':w.tags.get('maxspeed:forward',''),
+                          'maxspeed:backward':w.tags.get('maxspeed:backward',''),
+                          'point':coords[len(coords)//2] if coords else None,
+                          'nodes':len(coords)
+                      })
+          a=Audit();a.apply_file('/tmp/uruguay-latest.osm.pbf',locations=True,idx='flex_mem')
+          print('AV_ITALIA_TOTAL_OSM_WAYS',a.ways,flush=True)
+          print('AV_ITALIA_SPEED_TAG_DISTRIBUTION',dict(a.limits),flush=True)
+          for speed,examples in a.examples.items():
+              print('AV_ITALIA_SPEED_TAG',speed,'SAMPLE',examples,flush=True)
+          PY
