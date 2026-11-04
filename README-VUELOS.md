@@ -139,3 +139,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Conserva información de accesibilidad que aclara que la calle es aproximada y no garantiza un límite de velocidad.
 - Cambio solo visual, sin alterar Geocoder, GPS, límites OSM, avisos, vuelos, pantalla encendida o solapa inferior.
 - Rama QA aislada; no se modifica main, producción, Supabase, Mapa QT ni Quick Trip.
+
+## v1.17.0 — Límites de velocidad locales sin servidor en carretera (QA)
+- Corrige la causa observada en Samsung: Overpass devolvía «Fuente cartográfica sin respuesta» y mantenía N/D aunque el nombre de la avenida funcionara.
+- La compilación incorpora una **instantánea local** de tramos transitables de OpenStreetMap (descarga Geofabrik Uruguay) recortada a una zona que abarca Montevideo y buena parte de Canelones: latitud -35.15 a -34.05, longitud -57.3 a -55.2. No se anuncian límites nacionales fuera de esa cobertura.
+- El archivo se genera durante GitHub Actions y se integra en la APK. Se divide en celdas de 0.01° (~1 km). La app abre únicamente la celda del GPS actual en un hilo secundario, con una caché mínima.
+- Incluye calles con y sin etiqueta numérica de límite para impedir tomar el límite de una avenida vecina cuando la vía actual no tiene `maxspeed` registrado.
+- Si la calle más cercana tiene `maxspeed` legible, aparece el valor. Si no hay límite etiquetado, las vías son ambiguas, el GPS es impreciso o la calle está fuera del área, sigue mostrando N/D con motivo detallado. Las señales reales prevalecen. Los datos requieren actualización mediante futuras versiones.
+- Una vez instalada la APK, **consultar límites no requiere conexión ni envía GPS a Overpass**. El geocodificador Android que muestra el nombre de la calle sigue pudiendo requerir red, independientemente del límite.
+- Se conserva la franja mínima con nombre de calle, el velocímetro, aviso rojo por exceso, vibración optativa, vuelos, pantalla encendida y la solapa inferior plegable.
+- Fuente, licencia y atribución: © OpenStreetMap contributors; datos procesados a partir del extracto Geofabrik Uruguay, licencia ODbL 1.0.
+- QA aislada; ningún cambio en Quick Trip, Mapa QT, Supabase, producción ni main.
