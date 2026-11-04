@@ -13,11 +13,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /** Compact, source-labelled arrivals view. Only confirmed statuses are marked landed. */
 public final class DriverBoard extends ScrollView {
@@ -32,7 +30,7 @@ public final class DriverBoard extends ScrollView {
         setBackgroundColor(Color.WHITE);
         body=new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(12),dp(1),dp(12),dp(12));
+        body.setPadding(dp(11),0,dp(11),dp(9));
         addView(body,new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
     }
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
@@ -49,11 +47,11 @@ public final class DriverBoard extends ScrollView {
     private void section(String title,String detail){
         TextView t=text(title,12,TEXT,true);
         t.setLetterSpacing(0.045f);
-        t.setPadding(dp(2),dp(12),dp(2),dp(2));
+        t.setPadding(dp(2),dp(5),dp(2),dp(1));
         body.addView(t);
         if(detail!=null && !detail.isEmpty()){
             TextView d=text(detail,10,GREY,false);
-            d.setPadding(dp(2),0,dp(2),dp(7));
+            d.setPadding(dp(2),0,dp(2),dp(4));
             body.addView(d);
         }
     }
@@ -114,9 +112,9 @@ public final class DriverBoard extends ScrollView {
         boolean sameDay=selected.equals(lastRenderedDate);
         lastRenderedDate=selected;
         body.removeAllViews();
-        String title=DateTimeFormatter.ofPattern("EEEE d 'de' MMMM",new Locale("es","UY")).format(selected);
-        section("FECHA · "+title.toUpperCase(new Locale("es","UY")),
-            selected.equals(today)?"Próximos aterrizajes · Montevideo":"Consulta del día seleccionado · horario local");
+        // Fecha y hora locales aparecen una vez en el encabezado de Montevideo.
+        // Si la fuente muestra otro día, el encabezado de la pantalla y el aviso
+        // de fecha distinta ya lo identifican; el filtro manual muestra su fecha.
 
         if(flights==null||flights.isEmpty()){
             section(emptyInSource?"FUENTE SIN RESULTADOS":"DATOS NO DISPONIBLES",
@@ -152,11 +150,11 @@ public final class DriverBoard extends ScrollView {
             for(int i=0;i<later.size();i++)flight(later.get(i),i==0,now,false);
         }else if(selected.equals(today)){
             if(!soon.isEmpty()){
-                section("PRÓXIMOS 90 MIN","Primero el próximo avión · estimación si está disponible");
+                section("PRÓXIMOS 90 MIN",null);
                 for(int i=0;i<soon.size();i++)flight(soon.get(i),i==0,now,true);
             }
             if(!later.isEmpty()){
-                section("MÁS TARDE","Llegadas previstas hoy");
+                section("MÁS TARDE",null);
                 for(int i=0;i<later.size();i++)flight(later.get(i),soon.isEmpty()&&i==0,now,true);
             }
             if(soon.isEmpty()&&later.isEmpty())
