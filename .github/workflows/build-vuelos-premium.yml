@@ -1,7 +1,7 @@
-name: Vuelos Uruguay 1.21.0 - Wide left-aligned street label
+name: Vuelos Uruguay 1.22.0 - Compact flight layout (visual QA)
 on:
   push:
-    branches: [qa/vuelos-uruguay-wide-street-pill-v121-20261104]
+    branches: [qa/vuelos-uruguay-visual-compact-v122-20261104]
     paths: ['app/**', '*.gradle.kts', 'gradle.properties', '.github/workflows/build-vuelos-premium.yml']
   workflow_dispatch:
 permissions:
@@ -71,6 +71,23 @@ jobs:
           assert 'streetValue=text("Activá GPS",15,NAVY,false)' in block
           print("QA_UI_STREET_CAPSULE_OK: flexible width, left aligned 15sp, fixed GPS column")
           PY
+      - name: Verify visual-only compact layout
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          board=Path('app/src/main/java/uy/vuelos/uruguay/DriverBoard.java').read_text()
+          screen=Path('app/src/main/java/uy/vuelos/uruguay/MainActivity.java').read_text()
+          road=Path('app/src/main/java/uy/vuelos/uruguay/RoadSpeedPanel.java').read_text()
+          assert 'section("FECHA · "' not in board
+          assert 'section("PRÓXIMOS 90 MIN",null)' in board
+          assert 'section("MÁS TARDE",null)' in board
+          assert 'localTime.setText(localDate()' in screen
+          assert 'label("MOVIMIENTOS DE VUELOS"' in screen
+          assert 'duplicateMappedCaption?View.GONE:View.VISIBLE' in road
+          assert 'visual==SpeedColorPolicy.RED' in road
+          print('QA_VISUAL_COMPACT_OK: date once, condensed flight list, alerts retained')
+          PY
       - name: Build APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - name: Validate APK signature and package
@@ -79,19 +96,19 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
-          cp "$apk" Vuelos-Uruguay-Conductor-v1.21.0.apk
+          cp "$apk" Vuelos-Uruguay-Conductor-v1.22.0.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk" | tee firma.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee paquete.txt
           grep -F "package: name='uy.vuelos.uruguay'" paquete.txt
-          grep -F "versionName='1.21.0'" paquete.txt
-          sha256sum Vuelos-Uruguay-Conductor-v1.21.0.apk | tee SHA256SUMS.txt
+          grep -F "versionName='1.22.0'" paquete.txt
+          sha256sum Vuelos-Uruguay-Conductor-v1.22.0.apk | tee SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Vuelos-Uruguay-Conductor-v1.21.0
+          name: Vuelos-Uruguay-Conductor-v1.22.0
           if-no-files-found: error
           retention-days: 30
           path: |
-            Vuelos-Uruguay-Conductor-v1.21.0.apk
+            Vuelos-Uruguay-Conductor-v1.22.0.apk
             SHA256SUMS.txt
             firma.txt
             paquete.txt
@@ -101,4 +118,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create vuelos-uruguay-conductor-v1.21.0-20261104 Vuelos-Uruguay-Conductor-v1.21.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.21.0' --notes 'QA visual: cápsula del nombre de calle de ancho completo sobre velocidad y límite, texto a la izquierda de 15sp peso medio, 34dp de alto. Sin cambios en GPS, límites, vuelos, notificaciones o Quick Trip.'
+          gh release create vuelos-uruguay-conductor-v1.22.0-20261104 Vuelos-Uruguay-Conductor-v1.22.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.22.0' --notes 'QA visual v1.22: fecha única arriba, sin renglones repetidos de calle ni fecha, y lista de arribos más compacta. Sin cambios funcionales de GPS, límites, vuelos, notificaciones, Quick Trip ni producción.'
