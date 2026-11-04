@@ -12,5 +12,15 @@ public final class OfflineTilePolicy {
         return lat>=south-inset&&lat<south+0.01+inset&&
                lon>=west-inset&&lon<west+0.01+inset;
     }
+    /** Signed integers survive negative Uruguay coordinates without collisions. */
+    public static int cell(double degrees){
+        return (int)Math.floor(degrees*100.0);
+    }
+    public static long key(int latitudeCell,int longitudeCell){
+        return (((long)latitudeCell)<<32)|(longitudeCell&0xffffffffL);
+    }
+    public static int latitudeOf(long key){return (int)(key>>32);}
+    public static int longitudeOf(long key){return (int)key;}
+
     private OfflineTilePolicy(){}
 }
