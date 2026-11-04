@@ -1,7 +1,7 @@
-name: Vuelos Uruguay 1.17.0 - Offline road speed limit data
+name: Vuelos Uruguay 1.18.0 - Stable offline map matching and readable street label
 on:
   push:
-    branches: [qa/vuelos-uruguay-offline-speed-limits-v117-20261103]
+    branches: [qa/vuelos-uruguay-map-stability-v118-20261103]
     paths: ['app/**', '*.gradle.kts', 'gradle.properties', '.github/workflows/build-vuelos-premium.yml']
   workflow_dispatch:
 permissions:
@@ -63,19 +63,19 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
-          cp "$apk" Vuelos-Uruguay-Conductor-v1.17.0.apk
+          cp "$apk" Vuelos-Uruguay-Conductor-v1.18.0.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk" | tee firma.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | tee paquete.txt
           grep -F "package: name='uy.vuelos.uruguay'" paquete.txt
-          grep -F "versionName='1.17.0'" paquete.txt
-          sha256sum Vuelos-Uruguay-Conductor-v1.17.0.apk | tee SHA256SUMS.txt
+          grep -F "versionName='1.18.0'" paquete.txt
+          sha256sum Vuelos-Uruguay-Conductor-v1.18.0.apk | tee SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Vuelos-Uruguay-Conductor-v1.17.0
+          name: Vuelos-Uruguay-Conductor-v1.18.0
           if-no-files-found: error
           retention-days: 30
           path: |
-            Vuelos-Uruguay-Conductor-v1.17.0.apk
+            Vuelos-Uruguay-Conductor-v1.18.0.apk
             SHA256SUMS.txt
             firma.txt
             paquete.txt
@@ -85,4 +85,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create vuelos-uruguay-conductor-v1.17.0-20261103 Vuelos-Uruguay-Conductor-v1.17.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.17.0' --notes 'QA: límites de velocidad con índice local OSM/Geofabrik Montevideo y Canelones. No requiere servidor Overpass durante la conducción. Solo límites registrados, N/D si faltan datos o GPS ambiguo. Vuelos, GPS, alertas y Quick Trip intactos.'
+          gh release create vuelos-uruguay-conductor-v1.18.0-20261103 Vuelos-Uruguay-Conductor-v1.18.0.apk SHA256SUMS.txt --target "$GITHUB_SHA" --title 'Vuelos Uruguay Conductor v1.18.0' --notes 'QA: matching local mejorado para Avenida Italia y cruces: combina segmentos de una misma calle OSM, utiliza rumbo GPS preciso para distinguir transversales sin adivinar velocidades, conserva N/D si hay ambigüedad real. Nombre de calle 14sp y cápsula más legible. Quick Trip intacto.'

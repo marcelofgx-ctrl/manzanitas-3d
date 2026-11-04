@@ -150,3 +150,14 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Se conserva la franja mínima con nombre de calle, el velocímetro, aviso rojo por exceso, vibración optativa, vuelos, pantalla encendida y la solapa inferior plegable.
 - Fuente, licencia y atribución: © OpenStreetMap contributors; datos procesados a partir del extracto Geofabrik Uruguay, licencia ODbL 1.0.
 - QA aislada; ningún cambio en Quick Trip, Mapa QT, Supabase, producción ni main.
+
+## v1.18.0 — Estabilidad de calle y límite durante la conducción
+- Problema reproducido en Samsung (capturas): Avenida Italia se mostró con velocidad GPS 52 km/h y límite 60 km/h; minutos antes/continuando por la misma avenida, «GPS entre calles con distintos límites» mostraba N/D y «Buscando nombre de calle…».
+- El emparejador del mapa offline **agrupa segmentos OSM del mismo way ID** antes de decidir si realmente hay otra calle con distinto límite, evitando evaluar duplicados como vías distintas.
+- Si dos calles con límites diferentes se cruzan, **solo con rumbo GPS suficientemente preciso y movimiento** (velocidad GPS >=5 m/s, precisión angular <=25°, precisión horizontal <=15 m) puede favorecer la vía alineada y descartar una calle perpendicular (>=55°). Sin rumbo fiable se mantiene la ambigüedad N/D.
+- **Nunca resuelve calles paralelas con distinto límite mediante rumbo**, ni fuerza una velocidad en una transición real entre segmentos del mismo nombre que tienen valores distintos.
+- El nombre de calle puede usar el segmento cartográfico cercano aunque el límite sea ambiguo, sin transformar un nombre aproximado en límite oficial.
+- La etiqueta de calle evita parpadeos durante lecturas breves (máximo 4,5 s, desplazamiento menor a 55 m); esto no conserva un valor de límite previo ni mantiene activas alertas con datos inciertos.
+- Cápsula de calle aumentada a 34 dp, tipografía «sans-serif-medium» 14 sp, máximo 275 dp de ancho, una sola línea y elipsis, manteniendo el panel compacto para Samsung.
+- Pruebas unitarias: avenida con cruce perpendicular, rumbo norte/este, calles paralelas con distintos límites, cambio real de límite en una avenida y segmentos repetidos. No se modifican fuentes de vuelos, notificaciones, precios, GPS en segundo plano, Quick Trip, Mapa QT, Supabase, producción ni main.
+- No garantiza coincidencia con señales oficiales ni cobertura OSM completa. Validación física final en Samsung pendiente; probar únicamente con un acompañante o el vehículo estacionado.
