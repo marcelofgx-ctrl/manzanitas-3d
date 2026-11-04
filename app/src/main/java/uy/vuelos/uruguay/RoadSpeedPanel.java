@@ -118,7 +118,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         limitTile.addView(limitCaption);
         LinearLayout limitLine=new LinearLayout(a);
         limitLine.setGravity(Gravity.BOTTOM);
-        limitValue=text("N/D",29,NAVY,true);
+        limitValue=text("—",29,NAVY,true);
         limitValue.setIncludeFontPadding(false);
         limitLine.addView(limitValue);
         TextView limitUnit=text("km/h",11,MUTED,false);
@@ -306,7 +306,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         hasUsableSpeed=false;
         overSince=0;
         speedValue.setText("—");
-        limitValue.setText("N/D");
+        limitValue.setText("—");
         roadStatus=enabled?"GPS en pausa":"GPS apagado · tocá GPS para activar";
         renderSpeedColors();
     }
@@ -344,7 +344,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
                 ? StreetNamePolicy.clean(match.name):"";
             renderStreetName();
             currentLimit=match.confident?match.limitKmh:0;
-            limitValue.setText(match.confident?String.valueOf(match.limitKmh):"N/D");
+            limitValue.setText(match.confident?String.valueOf(match.limitKmh):"—");
             roadStatus=match.confident
                 ?(match.name.isEmpty()?"Límite cartográfico · señal prevalece":
                     match.name+" · límite local OSM")
@@ -466,7 +466,7 @@ public final class RoadSpeedPanel extends LinearLayout implements LocationListen
         currentLimit=0;
         hasUsableSpeed=false;
         roadStatus="GPS desactivado en Android";
-        speedValue.setText("—");limitValue.setText("N/D");
+        speedValue.setText("—");limitValue.setText("—");
         overSince=0L;
         renderSpeedColors();
     }
