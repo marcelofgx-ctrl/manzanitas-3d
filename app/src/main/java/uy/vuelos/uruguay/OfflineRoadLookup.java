@@ -36,6 +36,8 @@ public final class OfflineRoadLookup {
     private List<RoadSpeedMatcher.Road> cached=Collections.emptyList();
     private Location latestFix;
     private String cacheError="";
+    private final MovingCourseFilter courseFilter=new MovingCourseFilter();
+    private double heading=Double.NaN;
 
     public OfflineRoadLookup(Context ctx){context=ctx.getApplicationContext();}
     public void resume(){active=true;}
@@ -43,28 +45,17 @@ public final class OfflineRoadLookup {
         active=false;pending=false;generation++;
         loadedLat=Integer.MAX_VALUE;loadedLon=Integer.MAX_VALUE;
         cached=Collections.emptyList();latestFix=null;cacheError="";
+        courseFilter.reset();heading=Double.NaN;
     }
     public void close(){
         pause();worker.shutdownNow();
         try { if(zip!=null)zip.close(); }catch(Exception ignored){}
         zip=null;
     }
-    private static double usableBearing(Location fix){
-        // Heading can help distinguish crossing avenues, never parallel streets.
-        // Ignore stationary/slow fixes and compass readings with high uncertainty.
-        if(fix==null||!fix.hasSpeed()||fix.getSpeed()<5f||!fix.hasBearing())
-            return Double.NaN;
-        if(android.os.Build.VERSION.SDK_INT>=26 &&
-           (!fix.hasBearingAccuracy()||fix.getBearingAccuracyDegrees()>25f))
-            return Double.NaN;
-        return fix.getBearing();
-    }
-
-    private static RoadSpeedMatcher.Match match(List<RoadSpeedMatcher.Road> roads,
-                                                 Location fix){
+    private RoadSpeedMatcher.Match match(List<RoadSpeedMatcher.Road> roads,
+                                          Location fix){
         return RoadSpeedMatcher.nearest(roads,fix.getLatitude(),fix.getLongitude(),
-            fix.hasAccuracy()?fix.getAccuracy():Float.POSITIVE_INFINITY,
-            usableBearing(fix));
+            fix.hasAccuracy()?fix.getAccuracy():Float.POSITIVE_INFINITY,heading);
     }
 
     private static String explain(RoadSpeedMatcher.Match m){
@@ -82,6 +73,15 @@ public final class OfflineRoadLookup {
     public void onLocation(Location position,Callback callback){
         if(!active||position==null)return;
         latestFix=new Location(position);
+        // Prefer precise GPS heading; when Android omits bearing accuracy, derive
+        // course conservatively from >=42m of accurate real movement.
+        heading=courseFilter.sample(position.getLatitude(),position.getLongitude(),
+            position.hasAccuracy()?position.getAccuracy():Float.POSITIVE_INFINITY,
+            position.hasSpeed()?position.getSpeed():0f,
+            position.getElapsedRealtimeNanos()/1000000L,
+            position.hasBearing()?position.getBearing():Double.NaN,
+            android.os.Build.VERSION.SDK_INT>=26 && position.hasBearingAccuracy()
+                ?position.getBearingAccuracyDegrees():Double.NaN);
         float acc=position.hasAccuracy()?position.getAccuracy():Float.POSITIVE_INFINITY;
         if(acc<=0||acc>25f){
             callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
@@ -100,7 +100,16 @@ public final class OfflineRoadLookup {
             callback.onLimit(match,explain(match));
             return;
         }
-        callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
+        // A tiny, bounded handoff at a 1km tile boundary can be resolved
+        // using fully mapped overlapping segments from the previously loaded tile.
+        // No "last speed" is reused; the CURRENT location is re-matched to geometry.
+        boolean safePreviousTile=OfflineTilePolicy.withinSafeLoadedMargin(
+            loadedLat,loadedLon,lat,lon);
+        RoadSpeedMatcher.Match previous=safePreviousTile?
+            match(cached,position):RoadSpeedMatcher.Match.unavailable();
+        if(previous.confident && previous.distanceMeters<=15f)
+            callback.onLimit(previous,"Límite cartográfico · cambio de celda");
+        else callback.onLimit(RoadSpeedMatcher.Match.unavailable(),
             pending?"Buscando límite en mapa local…":cacheError.isEmpty()?
             "Leyendo mapa local…":cacheError);
         if(pending)return;
