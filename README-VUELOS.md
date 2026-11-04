@@ -171,3 +171,15 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Se conservaron los límites en N/D cuando hay vías paralelas o tramos con límites diferentes verdaderamente indistinguibles. No se fija 75 ni se usa el nombre de la calle como prueba de su límite.
 - Pruebas JUnit para velocidad nula, precisión mala, desplazamiento mínimo, rumbo disponible y caducidad, y cambios de celda con y sin margen de solapamiento.
 - El usuario debe validar físicamente con vehículo estacionado o acompañante y contrastar señales. Vuelos, geocodificador y avisos intactos. Sin tocar main, Quick Trip, Mapa QT, Supabase ni producción.
+
+## v1.20.0 — Corregido el salto involuntario de Hoy en vivo a Consultar fecha
+- Captura del Samsung a las 22:27 del 03/11/2026: «HOY · EN VIVO» en gris, «CONSULTAR FECHA» seleccionado, fecha 04/11/2026 a partir de 07:00 y mensaje sin fuente conectada. El código original convertía automáticamente el modo en vivo en manual cuando la fecha mostrada por Avionio difería del día actual.
+- Se eliminó ese cambio silencioso: la fecha publicada por el proveedor es metadato, **no autorización para cambiar la selección del usuario**.
+- Si el proveedor pasa al día siguiente, la app **mantiene el modo en vivo**, muestra de forma explícita «AHORA · EN VIVO» y la fecha real de las filas, e informa que no se han confirmado los vuelos del día actual. Así no presenta vuelos de mañana como si fueran de hoy.
+- La actualización automática continúa cada tres minutos mientras el modo sea en vivo; se suspende solo cuando el usuario selecciona explícitamente Consultar fecha, apaga Auto, o minimiza la aplicación.
+- Al tocar Hoy desde una consulta manual o desde un tablero que la fuente avanzó al día siguiente, se ocultan controles de fecha, se cancela la consulta manual anterior y se vuelve a cargar la URL del proveedor.
+- Los callbacks de la WebView ya no pisan la vista de fecha manual. No se generan notificaciones para vuelos de mañana mostrados en el panel en vivo.
+- Se agregan tests de regresión para cambios automáticos de fecha en la fuente, bloqueo manual explícito y actualización en segundo plano.
+- Esta corrección no crea datos de vuelos: si Avionio deja de publicar vuelos de hoy, no puede fabricar arribos y se informa la fecha real del tablero.
+- Mantiene el velocímetro y las mejoras de mapa offline de v1.19; sin cambios en producción, main, Quick Trip, Mapa QT, Supabase ni otros motores.
+- Rama QA aislada. Falta validación física en Samsung.
