@@ -19,4 +19,22 @@ public final class OfflineTilePolicyTest {
         assertFalse(OfflineTilePolicy.withinSafeLoadedMargin(Integer.MAX_VALUE,
             Integer.MAX_VALUE,-34.895,-56.145));
     }
+    @Test public void cachedCellsSupportNegativeLatitudesAndLongitudes(){
+        int lat=OfflineTilePolicy.cell(-34.895);
+        int lon=OfflineTilePolicy.cell(-56.145);
+        long key=OfflineTilePolicy.key(lat,lon);
+        assertEquals(lat,OfflineTilePolicy.latitudeOf(key));
+        assertEquals(lon,OfflineTilePolicy.longitudeOf(key));
+        assertEquals(-3490,lat);
+        assertEquals(-5615,lon);
+        assertNotEquals(key,OfflineTilePolicy.key(lat,lon+1));
+        assertNotEquals(key,OfflineTilePolicy.key(lat+1,lon));
+    }
+    @Test public void boundaryChangesCellWithoutGuessingLimit(){
+        assertEquals(-3490,OfflineTilePolicy.cell(-34.9000001));
+        assertEquals(-3490,OfflineTilePolicy.cell(-34.9000));
+        assertEquals(-3489,OfflineTilePolicy.cell(-34.8999999));
+        assertFalse(OfflineTilePolicy.withinSafeLoadedMargin(
+            -3490,-5615,-34.895,-56.13));
+    }
 }
