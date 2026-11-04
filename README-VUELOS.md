@@ -161,3 +161,13 @@ Al pasar a modo manual se descarta la lista anterior hasta leer la nueva fecha, 
 - Cápsula de calle aumentada a 34 dp, tipografía «sans-serif-medium» 14 sp, máximo 275 dp de ancho, una sola línea y elipsis, manteniendo el panel compacto para Samsung.
 - Pruebas unitarias: avenida con cruce perpendicular, rumbo norte/este, calles paralelas con distintos límites, cambio real de límite en una avenida y segmentos repetidos. No se modifican fuentes de vuelos, notificaciones, precios, GPS en segundo plano, Quick Trip, Mapa QT, Supabase, producción ni main.
 - No garantiza coincidencia con señales oficiales ni cobertura OSM completa. Validación física final en Samsung pendiente; probar únicamente con un acompañante o el vehículo estacionado.
+
+## v1.19.0 — Mejoras conservadoras para 75/N/D intermitentes en Avenida Italia
+- Incidencia real en Samsung: conduciendo por Avenida Italia el límite cartográfico cambia reiteradamente entre 75 km/h y «N/D».
+- Auditoría del extracto Geofabrik Uruguay: en 256 ways con nombre Avenida Italia se observaron etiquetas de límite 30 (18 ways), 45 (101), 60 (54), 75 (34), sin etiqueta (49). Por tanto, **75 existe realmente en OSM**, pero ninguna de esas etiquetas prueba por sí misma el límite oficial vigente en la posición del conductor.
+- Se identificaron dos posibles causas técnicas de N/D intermitente: rumbo GPS descartado por falta de metadatos de precisión angular y mensaje de «N/D» emitido siempre que se cargaba la siguiente celda del mapa (~1 km).
+- Se incorporó `MovingCourseFilter`: con rumbo GPS preciso se utiliza ese valor; si Android no comunica su precisión, se calcula un rumbo a partir de >=42 m de desplazamiento real a velocidad y precisión verificables. Se descarta parado, con precisión horizontal >12 m, saltos improbables o rumbo calculado de más de 5,5 s.
+- En cambios de celda del mapa, **solamente** puede mantenerse un límite cuando los datos de geometría superpuestos de la celda anterior se vuelven a contrastar con la posición actual (hasta 11 m fuera de la celda y <=15 m de la misma calle). No se conserva una velocidad previa sin georreferenciarla.
+- Se conservaron los límites en N/D cuando hay vías paralelas o tramos con límites diferentes verdaderamente indistinguibles. No se fija 75 ni se usa el nombre de la calle como prueba de su límite.
+- Pruebas JUnit para velocidad nula, precisión mala, desplazamiento mínimo, rumbo disponible y caducidad, y cambios de celda con y sin margen de solapamiento.
+- El usuario debe validar físicamente con vehículo estacionado o acompañante y contrastar señales. Vuelos, geocodificador y avisos intactos. Sin tocar main, Quick Trip, Mapa QT, Supabase ni producción.
